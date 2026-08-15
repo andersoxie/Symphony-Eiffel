@@ -1,0 +1,18 @@
+{
+  "issues": [
+    {
+      "id": "opaque-1",
+      "identifier": "EIFFEL-42",
+      "title": "First record",
+      "state": "Todo",
+      "dispatchable": true
+    },
+    {
+      "id": "opaque-2",
+      "identifier": "EIFFEL-42",
+      "title": "Conflicting workspace identity",
+      "state": "Todo",
+      "dispatchable": true
+    }
+  ]
+}
