@@ -23,6 +23,8 @@ feature {NONE} -- Initialization
 			apply_defaults
 			read_config (a_workflow.config)
 			validate
+		ensure
+			source_path_set: workflow_path.is_equal (a_workflow.path)
 		end
 
 feature -- Status
@@ -30,6 +32,13 @@ feature -- Status
 	is_valid: BOOLEAN
 		do
 			Result := error = Void
+		ensure
+			valid_tracker_profile: Result implies
+				(not tracker_kind.is_empty and then not active_states.is_empty and then not terminal_states.is_empty)
+			valid_numeric_settings: Result implies
+				(poll_interval_ms > 0 and then hook_timeout_ms > 0 and then max_concurrent_agents > 0 and then
+				max_turns > 0 and then max_retry_backoff_ms > 0 and then turn_timeout_ms > 0 and then read_timeout_ms > 0)
+			valid_codex_command: Result implies not strings.is_blank (codex_command)
 		end
 
 	error: detachable SYM_ERROR
@@ -99,11 +108,17 @@ feature -- Queries
 	is_active_state (a_state: READABLE_STRING_GENERAL): BOOLEAN
 		do
 			Result := normalized_list_has (active_states, a_state)
+		ensure
+			definition: Result = normalized_list_has (active_states, a_state)
+			blank_state_rejected: strings.is_blank (a_state) implies not Result
 		end
 
 	is_terminal_state (a_state: READABLE_STRING_GENERAL): BOOLEAN
 		do
 			Result := normalized_list_has (terminal_states, a_state)
+		ensure
+			definition: Result = normalized_list_has (terminal_states, a_state)
+			blank_state_rejected: strings.is_blank (a_state) implies not Result
 		end
 
 	state_limit (a_state: READABLE_STRING_GENERAL): INTEGER
@@ -116,6 +131,12 @@ feature -- Queries
 			else
 				Result := max_concurrent_agents
 			end
+		ensure
+			positive_when_valid: is_valid implies Result > 0
+			configured_limit: state_concurrency.has (strings.normalized (a_state)) implies
+				Result = state_concurrency.found_item
+			default_limit: not state_concurrency.has (strings.normalized (a_state)) implies
+				Result = max_concurrent_agents
 		end
 
 feature {NONE} -- Defaults
@@ -413,5 +434,6 @@ feature {NONE} -- Shared helpers
 invariant
 	provider_attached: tracker_provider /= Void
 	state_limits_attached: state_concurrency /= Void
+	positive_state_limits: across state_concurrency as cursor all cursor.item > 0 end
 
 end

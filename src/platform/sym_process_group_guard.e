@@ -16,6 +16,10 @@ feature {NONE} -- Initialization
 			process_id := a_process_id
 			native_handle := c_create (a_process_id)
 			is_attached := native_handle /= default_pointer
+		ensure
+			process_id_set: process_id = a_process_id
+			attachment_matches_handle: is_attached = (native_handle /= default_pointer)
+			termination_not_attempted: not last_termination_successful
 		end
 
 feature -- Status
@@ -27,6 +31,8 @@ feature -- Status
 			-- Does the owned group still contain a live process?
 		do
 			Result := not is_attached or else c_has_members (native_handle, process_id) /= 0
+		ensure
+			unattached_is_conservative: not is_attached implies Result
 		end
 
 	last_termination_successful: BOOLEAN
@@ -41,6 +47,8 @@ feature -- Control
 			else
 				last_termination_successful := False
 			end
+		ensure
+			unattached_cannot_terminate: not is_attached implies not last_termination_successful
 		end
 
 	close_when_empty
@@ -51,6 +59,9 @@ feature -- Control
 				native_handle := default_pointer
 				is_attached := False
 			end
+		ensure
+			unattached_remains_unattached: not (old is_attached) implies not is_attached
+			attachment_matches_handle: is_attached = (native_handle /= default_pointer)
 		end
 
 feature {NONE} -- Native bridge

@@ -13,6 +13,9 @@ feature {NONE} -- Initialization
 		do
 			adapter := a_adapter
 			create mutex.make
+		ensure
+			adapter_selected: kind.same_string (a_adapter.kind)
+			no_replacements: adapter_generation = 0
 		end
 
 feature -- Access
@@ -20,6 +23,8 @@ feature -- Access
 	kind: STRING_32
 		do
 			Result := adapter.kind
+		ensure
+			present: not Result.is_empty
 		end
 
 	secret_environment_names: ARRAYED_LIST [STRING_32]
@@ -27,6 +32,10 @@ feature -- Access
 			mutex.lock
 			Result := adapter.secret_environment_names
 			mutex.unlock
+		ensure
+			all_names_present: across Result as name_cursor all
+				not name_cursor.item.is_empty
+			end
 		rescue
 			mutex.unlock
 			create Result.make (0)
@@ -39,7 +48,10 @@ feature -- Adapter lifecycle
 		do
 			mutex.lock
 			adapter := a_adapter
+			adapter_generation := adapter_generation + 1
 			mutex.unlock
+		ensure
+			replacement_recorded: adapter_generation > old adapter_generation
 		rescue
 			mutex.unlock
 		end
@@ -56,6 +68,9 @@ feature -- Reads
 			create Result.make (adapter.last_issues, adapter.last_error)
 			mutex.unlock
 			locked := False
+		ensure
+			empty_short_circuit: a_states.is_empty implies Result.issues.is_empty
+			failure_has_no_issues: not Result.is_success implies Result.issues.is_empty
 		rescue
 			if locked then mutex.unlock end
 			create Result.make (create {ARRAYED_LIST [SYM_ISSUE]}.make (0),
@@ -72,6 +87,9 @@ feature -- Reads
 			create Result.make (adapter.last_issues, adapter.last_error)
 			mutex.unlock
 			locked := False
+		ensure
+			empty_short_circuit: a_ids.is_empty implies Result.issues.is_empty
+			failure_has_no_issues: not Result.is_success implies Result.issues.is_empty
 		rescue
 			if locked then mutex.unlock end
 			create Result.make (create {ARRAYED_LIST [SYM_ISSUE]}.make (0),
@@ -81,6 +99,8 @@ feature -- Reads
 feature {NONE} -- Implementation
 
 	adapter: SYM_TRACKER_ADAPTER
+
+	adapter_generation: NATURAL_64
 
 	mutex: MUTEX
 

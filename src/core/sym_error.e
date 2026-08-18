@@ -21,6 +21,9 @@ feature {NONE} -- Initialization
 		do
 			code := a_code.to_string_32.twin
 			message := a_message.to_string_32.twin
+		ensure
+			code_set: code.same_string_general (a_code)
+			message_set: message.same_string_general (a_message)
 		end
 
 feature -- Access
@@ -32,6 +35,8 @@ feature -- Access
 	out: STRING
 		do
 			Result := code.to_string_8 + ": " + message.to_string_8
+		ensure then
+			formatted: Result.same_string (code.to_string_8 + ": " + message.to_string_8)
 		end
 
 invariant

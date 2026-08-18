@@ -65,6 +65,12 @@ feature -- Parsing
 					end
 				end
 			end
+		ensure
+			empty_text_not_parsed: a_text.is_empty implies Result = Void
+			attached_result_is_valid:
+				attached Result as value implies
+					date_time_valid (value.year, value.month, value.day, value.hour,
+						value.minute, value.fine_second)
 		end
 
 feature {NONE} -- Validation

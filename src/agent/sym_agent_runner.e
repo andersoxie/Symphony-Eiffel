@@ -16,6 +16,11 @@ feature {NONE} -- Initialization
 			create last_session_id.make_empty
 			create control_lock.make
 			create client_stop_lock.make
+		ensure
+			no_outcome: outcome = Void
+			no_client: client = Void
+			not_running: not is_running
+			cancellation_not_requested: not cancel_requested
 		end
 
 feature -- Result
@@ -48,6 +53,8 @@ feature -- Events and cancellation
 					current_client.set_event_handler (a_handler)
 				end
 			end
+		ensure
+			handler_set_or_preserved: event_handler = a_handler or else event_handler = old event_handler
 		rescue
 			if locked then control_lock.unlock end
 			retried := True
@@ -72,6 +79,8 @@ feature -- Events and cancellation
 					stop_client_safely (current_client)
 				end
 			end
+		ensure
+			cancellation_is_sticky: old cancel_requested implies cancel_requested
 		rescue
 			if locked then control_lock.unlock end
 			retried := True
@@ -88,6 +97,9 @@ feature -- Execution
 		a_tracker: SYM_TRACKER_GATEWAY
 	)
 			-- Execute one worker attempt synchronously.
+		require
+			idle: not is_running
+			positive_attempt: attached a_attempt as attempt implies attempt.item > 0
 		local
 			workspace: detachable SYM_WORKSPACE
 			new_client: SYM_APP_SERVER_CLIENT
@@ -168,6 +180,7 @@ feature -- Execution
 		ensure
 			not_running: not is_running
 			outcome_available: outcome /= Void
+			client_stopped: attached client as last_client implies not last_client.has_live_process
 		rescue
 			retried := True
 			if outcome = Void then

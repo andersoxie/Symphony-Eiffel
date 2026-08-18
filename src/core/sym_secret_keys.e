@@ -48,6 +48,8 @@ feature -- Classification
 				key.ends_with ("_private_key") or else
 				key.ends_with ("_credential") or else
 				key.ends_with ("_credentials")
+		ensure
+			empty_key_not_secret: a_key.is_empty implies not Result
 		end
 
 end

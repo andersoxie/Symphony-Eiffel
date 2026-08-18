@@ -15,6 +15,9 @@ feature -- Parsing
 			if p.is_valid then
 				Result := p.parsed_json_value
 			end
+		ensure
+			attached_result_has_representation:
+				attached Result as value implies not value.representation.is_empty
 		end
 
 	parsed_object (a_text: READABLE_STRING_8): detachable JSON_OBJECT
@@ -22,6 +25,10 @@ feature -- Parsing
 			if attached {JSON_OBJECT} parsed_value (a_text) as o then
 				Result := o
 			end
+		ensure
+			object_returned_when_present:
+				attached Result as object_result implies not object_result.representation.is_empty
+			empty_text_not_parsed: a_text.is_empty implies Result = Void
 		end
 
 	cloned (a_value: JSON_VALUE): JSON_VALUE
@@ -55,6 +62,8 @@ feature -- Parsing
 			else
 				create {JSON_NULL} Result
 			end
+		ensure
+			structurally_independent: Result /= a_value
 		end
 
 feature -- Typed access
@@ -64,6 +73,12 @@ feature -- Typed access
 			if attached {JSON_STRING} a_object.item (a_key) as v then
 				Result := v.unescaped_string_32
 			end
+		ensure
+			string_returned_when_present:
+				attached {JSON_STRING} a_object.item (a_key) as value implies
+					attached Result as text and then text.same_string (value.unescaped_string_32)
+			non_string_not_returned:
+				not attached {JSON_STRING} a_object.item (a_key) implies Result = Void
 		end
 
 	integer_64 (a_object: JSON_OBJECT; a_key: READABLE_STRING_8): detachable INTEGER_64_REF
@@ -77,6 +92,11 @@ feature -- Typed access
 					Result.set_item (s.to_integer_64)
 				end
 			end
+		ensure
+			attached_result_matches_source:
+				attached Result as value implies
+					attached {JSON_NUMBER} a_object.item (a_key) as number and then
+					number.item.is_integer_64 and then value.item = number.item.to_integer_64
 		end
 
 	boolean (a_object: JSON_OBJECT; a_key: READABLE_STRING_8; a_default: BOOLEAN): BOOLEAN
@@ -86,6 +106,11 @@ feature -- Typed access
 			else
 				Result := a_default
 			end
+		ensure
+			boolean_returned_when_present:
+				attached {JSON_BOOLEAN} a_object.item (a_key) as value implies Result = value.item
+			default_returned_otherwise:
+				not attached {JSON_BOOLEAN} a_object.item (a_key) implies Result = a_default
 		end
 
 	object (a_object: JSON_OBJECT; a_key: READABLE_STRING_8): detachable JSON_OBJECT
@@ -93,6 +118,11 @@ feature -- Typed access
 			if attached {JSON_OBJECT} a_object.item (a_key) as v then
 				Result := v
 			end
+		ensure
+			object_returned_when_present:
+				attached {JSON_OBJECT} a_object.item (a_key) as value implies Result = value
+			non_object_not_returned:
+				not attached {JSON_OBJECT} a_object.item (a_key) implies Result = Void
 		end
 
 	array (a_object: JSON_OBJECT; a_key: READABLE_STRING_8): detachable JSON_ARRAY
@@ -100,6 +130,11 @@ feature -- Typed access
 			if attached {JSON_ARRAY} a_object.item (a_key) as v then
 				Result := v
 			end
+		ensure
+			array_returned_when_present:
+				attached {JSON_ARRAY} a_object.item (a_key) as value implies Result = value
+			non_array_not_returned:
+				not attached {JSON_ARRAY} a_object.item (a_key) implies Result = Void
 		end
 
 	string_list (a_object: JSON_OBJECT; a_key: READABLE_STRING_8): ARRAYED_LIST [STRING_32]
@@ -112,6 +147,11 @@ feature -- Typed access
 					end
 				end
 			end
+		ensure
+			missing_array_is_empty:
+				not attached {JSON_ARRAY} a_object.item (a_key) implies Result.is_empty
+			bounded_by_source:
+				attached {JSON_ARRAY} a_object.item (a_key) as value implies Result.count <= value.count
 		end
 
 feature -- Construction
@@ -121,6 +161,18 @@ feature -- Construction
 			create Result.make_empty
 			across a_values as c loop
 				Result.extend (create {JSON_STRING}.make_from_string_general (c.item))
+			end
+		ensure
+			string_elements: contains_only_strings (Result)
+		end
+
+feature {NONE} -- Contract support
+
+	contains_only_strings (a_values: JSON_ARRAY): BOOLEAN
+		do
+			Result := True
+			across a_values as cursor until not Result loop
+				Result := attached {JSON_STRING} cursor.item
 			end
 		end
 

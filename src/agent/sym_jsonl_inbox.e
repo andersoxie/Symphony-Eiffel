@@ -16,6 +16,11 @@ feature {NONE} -- Initialization
 			create lines.make (20)
 			create diagnostics.make_empty
 			last_activity_ms := clock.monotonic_milliseconds
+		ensure
+			no_pending_lines: lines.is_empty and partial.is_empty
+			no_diagnostics: diagnostic_snapshot.is_empty
+			not_overflowed: not has_overflowed
+			activity_initialized: last_activity_ms >= 0
 		end
 
 feature -- Callback input
@@ -49,6 +54,9 @@ feature -- Callback input
 				end
 			end
 			mutex.unlock
+		ensure
+			partial_line_bounded: partial.count <= max_line_size
+			overflow_clears_pending_input: overflowed implies partial.is_empty and lines.is_empty
 		rescue
 			mutex.unlock
 		end
@@ -60,6 +68,8 @@ feature -- Callback input
 			diagnostics.append (a_chunk)
 			if diagnostics.count > max_diagnostic_size then diagnostics.remove_head (diagnostics.count - max_diagnostic_size) end
 			mutex.unlock
+		ensure
+			diagnostics_bounded: diagnostics.count <= max_diagnostic_size
 		rescue
 			mutex.unlock
 		end
@@ -75,6 +85,9 @@ feature -- Consumption
 				lines.remove
 			end
 			mutex.unlock
+		ensure
+			line_size_bounded: attached Result as line implies line.count <= max_line_size
+			line_terminator_removed: attached Result as line implies not line.ends_with ("%R")
 		rescue
 			mutex.unlock
 			Result := Void
@@ -85,6 +98,8 @@ feature -- Consumption
 			mutex.lock
 			Result := last_activity_ms
 			mutex.unlock
+		ensure
+			non_negative: Result >= 0
 		rescue
 			mutex.unlock
 		end
@@ -94,6 +109,9 @@ feature -- Consumption
 			mutex.lock
 			Result := diagnostics.twin
 			mutex.unlock
+		ensure
+			bounded: Result.count <= max_diagnostic_size
+			independent_copy: Result /= diagnostics
 		rescue
 			mutex.unlock
 			create Result.make_empty
@@ -104,6 +122,8 @@ feature -- Consumption
 			mutex.lock
 			Result := overflowed
 			mutex.unlock
+		ensure
+			overflow_clears_pending_input: Result implies partial.is_empty and lines.is_empty
 		rescue
 			mutex.unlock
 		end

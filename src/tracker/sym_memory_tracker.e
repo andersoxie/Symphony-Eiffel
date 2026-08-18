@@ -16,6 +16,10 @@ feature {NONE} -- Initialization
 		do
 			create issues.make (10)
 			create last_issues.make (0)
+		ensure
+			store_empty: issues.is_empty
+			result_empty: last_issues.is_empty
+			no_error: last_error = Void
 		end
 
 feature -- Access
@@ -31,6 +35,8 @@ feature -- Access
 feature -- Mutation
 
 	put (a_issue: SYM_ISSUE)
+		require
+			valid_issue: a_issue.is_core_valid
 		local
 			replaced: BOOLEAN
 		do
@@ -38,12 +44,21 @@ feature -- Mutation
 				if c.item.id.same_string (a_issue.id) then issues [c.cursor_index] := a_issue; replaced := True end
 			end
 			if not replaced then issues.extend (a_issue) end
+		ensure
+			stored: issues.has (a_issue)
+			count_not_decreased: issues.count >= old issues.count
 		end
 
 	remove (a_id: READABLE_STRING_GENERAL)
+		require
+			id_present: not a_id.is_empty
 		do
 			from issues.start until issues.after loop
 				if issues.item.id.same_string_general (a_id) then issues.remove else issues.forth end
+			end
+		ensure
+			removed: across issues as issue_cursor all
+				not issue_cursor.item.id.same_string_general (a_id)
 			end
 		end
 
@@ -55,6 +70,8 @@ feature -- Contract
 			if not a_config.tracker_kind.is_case_insensitive_equal (kind) then
 				create last_error.make ("unsupported_tracker_kind", "Expected tracker.kind=memory")
 			end
+		ensure then
+			exact_result: last_call_succeeded = a_config.tracker_kind.is_case_insensitive_equal (kind)
 		end
 
 	fetch_issues_by_states (a_states: LIST [STRING_32])
@@ -66,6 +83,11 @@ feature -- Contract
 					if normalized_has (a_states, c.item.state) then last_issues.extend (c.item) end
 				end
 			end
+		ensure then
+			successful_items_match: last_error = Void implies
+				(across last_issues as issue_cursor all
+					normalized_has (a_states, issue_cursor.item.state)
+				end)
 		end
 
 	fetch_issues_by_ids (a_ids: LIST [STRING_32])
@@ -77,6 +99,11 @@ feature -- Contract
 					if exact_has (a_ids, c.item.id) then last_issues.extend (c.item) end
 				end
 			end
+		ensure then
+			successful_items_match: last_error = Void implies
+				(across last_issues as issue_cursor all
+					exact_has (a_ids, issue_cursor.item.id)
+				end)
 		end
 
 feature {NONE} -- Helpers

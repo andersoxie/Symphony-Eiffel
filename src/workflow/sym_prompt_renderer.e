@@ -12,6 +12,9 @@ feature {NONE} -- Initialization
 	make
 		do
 			create rendered_prompt.make_empty
+		ensure
+			output_empty: rendered_prompt.is_empty
+			idle: not is_success and error = Void
 		end
 
 feature -- Result
@@ -30,6 +33,9 @@ feature -- Rendering
 		a_attempt: detachable INTEGER_64_REF
 	)
 			-- Render a_template using the normalized issue and attempt values.
+		require
+			valid_issue: a_issue.is_core_valid
+			valid_attempt: attached a_attempt as attempt implies attempt.item > 0
 		local
 			template: STRING_32
 			environment: HASH_TABLE [JSON_VALUE, STRING_32]
@@ -55,6 +61,9 @@ feature -- Rendering
 					is_success := True
 				end
 			end
+		ensure
+			status_consistent: is_success = (error = Void)
+			failure_clears_output: not is_success implies rendered_prompt.is_empty
 		rescue
 			is_success := False
 			create rendered_prompt.make_empty
@@ -934,6 +943,7 @@ feature {NONE} -- Delimiters
 		end
 
 invariant
-	rendered_prompt_attached: rendered_prompt /= Void
+	success_has_no_error: is_success implies error = Void
+	error_clears_output: error /= Void implies not is_success and rendered_prompt.is_empty
 
 end

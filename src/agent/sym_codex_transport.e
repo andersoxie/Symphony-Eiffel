@@ -13,6 +13,13 @@ feature {NONE} -- Initialization
 		do
 			create inbox.make
 			create json
+		ensure
+			not_running: not is_running
+			no_live_processes: not has_live_processes
+			no_process_id: process_id = Void
+			no_error: last_error = Void
+			no_message: last_message = Void
+			no_diagnostics: diagnostics.is_empty
 		end
 
 feature -- Status
@@ -20,17 +27,26 @@ feature -- Status
 	is_running: BOOLEAN
 		do
 			Result := attached process as p and then p.is_running
+		ensure
+			running_process_available: Result implies attached process as p and then p.is_running
 		end
 
 	has_live_processes: BOOLEAN
 			-- Does the launched process or its attached OS group still contain a process?
 		do
 			Result := (attached process_guard as guard and then guard.has_live_members) or else is_running
+		ensure
+			running_process_is_live: is_running implies Result
+			no_owner_is_not_live: (process = Void and process_guard = Void) implies not Result
 		end
 
 	process_id: detachable STRING_32
 		do
 			if attached process as p and then p.launched then Result := p.id.out end
+		ensure
+			id_present: attached Result as id implies not id.is_empty
+			id_requires_launched_process: Result /= Void implies
+				attached process as p and then p.launched
 		end
 
 	last_error: detachable SYM_ERROR
@@ -40,11 +56,16 @@ feature -- Status
 	diagnostics: STRING_8
 		do
 			Result := inbox.diagnostic_snapshot
+		ensure
+			bounded: Result.count <= 65_536
 		end
 
 feature -- Lifecycle
 
 	start (a_command: READABLE_STRING_GENERAL; a_cwd, a_workspace_root: PATH; a_secret_names: ITERABLE [STRING_32])
+		require
+			command_present: not a_command.is_empty
+			no_live_processes: not has_live_processes
 		local
 			factory: PROCESS_FACTORY
 			p: PROCESS
@@ -89,6 +110,9 @@ feature -- Lifecycle
 					create last_error.make ("codex_launch_error", "Failed to launch bash/Codex app-server")
 				end
 			end
+		ensure
+			contained_or_error: last_error /= Void or else
+				(attached process_guard as attached_guard and then attached_guard.is_attached)
 		rescue
 			-- Preserve any launched process and guard so `stop' can still own and
 			-- terminate them during runner cleanup.
@@ -154,6 +178,8 @@ feature -- Lifecycle
 				process := Void
 				containment_failed := False
 			end
+		ensure
+			terminated_or_error: last_error /= Void or else not has_live_processes
 		rescue
 			create last_error.make ("codex_termination_error",
 				"Unexpected failure while terminating app-server")
@@ -170,21 +196,31 @@ feature -- Messaging
 			else
 				create last_error.make ("codex_process_exit", "App-server is not running")
 			end
+		ensure
+			unavailable_process_reported: not (old is_running) implies last_error /= Void
 		rescue
 			create last_error.make ("codex_write_error", "Unexpected app-server stdin failure")
 		end
 
 	next_message (a_silence_timeout_ms: INTEGER_64)
 			-- Wait for one valid JSON object. Noise is ignored; activity resets the silence timeout.
+		require
+			positive_timeout: a_silence_timeout_ms > 0
 		do
 			read_next_message (a_silence_timeout_ms, True)
+		ensure
+			message_or_error: (last_message /= Void) /= (last_error /= Void)
 		end
 
 	next_message_with_absolute_timeout (a_timeout_ms: INTEGER_64)
 			-- Wait for one valid JSON object for at most `a_timeout_ms` in total.
 			-- Stream noise and diagnostics do not extend this request deadline.
+		require
+			positive_timeout: a_timeout_ms > 0
 		do
 			read_next_message (a_timeout_ms, False)
+		ensure
+			message_or_error: (last_message /= Void) /= (last_error /= Void)
 		end
 
 feature {NONE} -- Message wait implementation

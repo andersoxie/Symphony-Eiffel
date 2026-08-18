@@ -39,6 +39,10 @@ feature -- Workspace keys
 		ensure
 			not_empty: not Result.is_empty
 			allowed: is_safe_key (Result)
+			unchanged_when_already_portable:
+				(is_safe_key (a_identifier) and then
+					(not {PLATFORM}.is_windows or else not is_windows_ambiguous_name (a_identifier))) implies
+					Result.same_string_general (a_identifier)
 		end
 
 	is_safe_key (a_key: READABLE_STRING_GENERAL): BOOLEAN
@@ -50,6 +54,10 @@ feature -- Workspace keys
 				Result := is_allowed_key_character (a_key [i])
 				i := i + 1
 			end
+		ensure
+			safe_is_nonempty: Result implies not a_key.is_empty
+			dot_not_safe: a_key.same_string (".") implies not Result
+			dot_dot_not_safe: a_key.same_string ("..") implies not Result
 		end
 
 	is_within (a_root, a_child: PATH): BOOLEAN
@@ -72,6 +80,9 @@ feature -- Workspace keys
 			elseif c.count > r.count and then c.substring (1, r.count).same_string (r) then
 				Result := r [r.count] = separator or else c [r.count + 1] = separator
 			end
+		ensure
+			root_contains_itself:
+				a_child.canonical_path.is_equal (a_root.canonical_path) implies Result
 		end
 
 	is_existing_workspace_directory (a_root, a_child: PATH): BOOLEAN
@@ -96,11 +107,17 @@ feature -- Workspace keys
 				-- may intentionally be mounted or linked by the operator.
 				Result := a_child.parent.canonical_path.is_equal (a_root.canonical_path)
 			end
+		ensure
+			accepted_path_is_contained: Result implies is_within (a_root, a_child)
+			accepted_path_is_not_root:
+				Result implies not a_child.canonical_path.is_equal (a_root.canonical_path)
 		rescue
 			Result := False
 		end
 
 	workspace_path (a_root: PATH; a_identifier: READABLE_STRING_GENERAL): detachable PATH
+		require
+			identifier_present: not a_identifier.is_empty
 		local
 			p: PATH
 		do
@@ -108,6 +125,11 @@ feature -- Workspace keys
 			if is_within (a_root, p) and then not p.canonical_path.is_equal (a_root.canonical_path) then
 				Result := p
 			end
+		ensure
+			attached_path_is_contained:
+				attached Result as path implies is_within (a_root, path)
+			attached_path_is_not_root:
+				attached Result as path implies not path.canonical_path.is_equal (a_root.canonical_path)
 		end
 
 feature {NONE} -- Implementation

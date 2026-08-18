@@ -12,6 +12,8 @@ feature {NONE} -- Initialization
 	make
 		do
 			create yaml.make
+		ensure
+			idle: not is_success and workflow = Void and error = Void
 		end
 
 feature -- Result
@@ -23,6 +25,8 @@ feature -- Result
 	is_success: BOOLEAN
 		do
 			Result := workflow /= Void and error = Void
+		ensure
+			definition: Result = (workflow /= Void and error = Void)
 		end
 
 feature -- Loading
@@ -78,6 +82,10 @@ feature -- Loading
 					create workflow.make (config, prompt_32, a_path, hash.sha_256_hex (content))
 				end
 			end
+		ensure
+			complete_result: (workflow /= Void) /= (error /= Void)
+			loaded_path_preserved: attached workflow as loaded implies
+				loaded.path.is_equal (a_path.canonical_path)
 		rescue
 			if attached f as open_file and then open_file.is_open_read then open_file.close end
 			workflow := Void

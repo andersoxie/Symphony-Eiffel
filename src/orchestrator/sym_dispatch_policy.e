@@ -9,12 +9,20 @@ feature -- Eligibility
 	is_routable (a_issue: SYM_ISSUE; a_config: SYM_CONFIG): BOOLEAN
 		do
 			Result := a_issue.dispatchable and then has_required_labels (a_issue, a_config.required_labels)
+		ensure
+			definition:
+				Result = (a_issue.dispatchable and then
+					has_required_labels (a_issue, a_config.required_labels))
 		end
 
 	is_candidate (a_issue: SYM_ISSUE; a_config: SYM_CONFIG): BOOLEAN
 		do
 			Result := a_issue.is_core_valid and then a_config.is_active_state (a_issue.state) and then
 				not a_config.is_terminal_state (a_issue.state) and then is_routable (a_issue, a_config)
+		ensure
+			definition:
+				Result = (a_issue.is_core_valid and then a_config.is_active_state (a_issue.state) and then
+					not a_config.is_terminal_state (a_issue.state) and then is_routable (a_issue, a_config))
 		end
 
 	has_required_labels (a_issue: SYM_ISSUE; a_required: ITERABLE [STRING_32]): BOOLEAN
@@ -30,6 +38,10 @@ feature -- Eligibility
 				end
 				Result := found
 			end
+		ensure
+			empty_finite_requirements:
+				attached {FINITE [STRING_32]} a_required as finite_required and then
+					finite_required.is_empty implies Result
 		end
 
 feature -- Ordering
@@ -50,6 +62,8 @@ feature -- Ordering
 					Result.put_left (issue_cursor.item)
 				end
 			end
+		ensure
+			dispatch_ordered: is_dispatch_sorted (Result)
 		end
 
 	comes_before (a_left, a_right: SYM_ISSUE): BOOLEAN
@@ -73,11 +87,16 @@ feature -- Ordering
 			else
 				Result := a_left.identifier < a_right.identifier
 			end
+		ensure
+			same_object_not_before: a_left = a_right implies not Result
 		end
 
 feature -- Retry
 
 	failure_delay_ms (a_attempt: INTEGER; a_cap_ms: INTEGER_64): INTEGER_64
+		require
+			attempt_positive: a_attempt >= 1
+			cap_positive: a_cap_ms > 0
 		local
 			index: INTEGER
 		do
@@ -86,6 +105,9 @@ feature -- Retry
 				if Result > a_cap_ms // 2 then Result := a_cap_ms else Result := (Result * 2).min (a_cap_ms) end
 				index := index + 1
 			end
+		ensure
+			positive: Result > 0
+			within_cap: Result <= a_cap_ms
 		end
 
 	continuation_delay_ms: INTEGER_64 = 1_000
@@ -103,6 +125,17 @@ feature {NONE} -- Implementation
 	strings: SYM_STRINGS
 		once
 			create Result
+		end
+
+	is_dispatch_sorted (a_values: ARRAYED_LIST [SYM_ISSUE]): BOOLEAN
+		local
+			i: INTEGER
+		do
+			Result := True
+			from i := 2 until i > a_values.count or else not Result loop
+				Result := not comes_before (a_values [i], a_values [i - 1])
+				i := i + 1
+			end
 		end
 
 end

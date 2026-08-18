@@ -12,6 +12,10 @@ feature {NONE} -- Initialization
 	make
 		do
 			create last_result.make (False, False, -1, "", "")
+		ensure
+			not_launched: not last_result.launched
+			not_timed_out: not last_result.timed_out
+			initial_exit_code: last_result.exit_code = -1
 		end
 
 feature -- Access
@@ -22,6 +26,8 @@ feature -- Execution
 
 	run_hook (a_script: READABLE_STRING_GENERAL; a_cwd: PATH; a_timeout_ms: INTEGER_64)
 			-- Run hook in the host-appropriate noninteractive shell.
+		require
+			positive_timeout: a_timeout_ms > 0
 		local
 			args: ARRAYED_LIST [READABLE_STRING_GENERAL]
 		do
@@ -39,10 +45,15 @@ feature -- Execution
 				args.extend (a_script)
 				run ("sh", args, a_cwd, a_timeout_ms)
 			end
+		ensure
+			result_recorded: last_result /= old last_result
 		end
 
 	run_bash (a_command: READABLE_STRING_GENERAL; a_cwd: PATH; a_timeout_ms: INTEGER_64)
 			-- Run the Codex launch command exactly through bash -lc.
+		require
+			command_present: not a_command.is_empty
+			positive_timeout: a_timeout_ms > 0
 		local
 			args: ARRAYED_LIST [READABLE_STRING_GENERAL]
 		do
@@ -50,9 +61,14 @@ feature -- Execution
 			args.extend ("-lc")
 			args.extend (a_command)
 			run (bash_executable, args, a_cwd, a_timeout_ms)
+		ensure
+			result_recorded: last_result /= old last_result
 		end
 
 	run (a_executable: READABLE_STRING_GENERAL; a_arguments: ITERABLE [READABLE_STRING_GENERAL]; a_cwd: PATH; a_timeout_ms: INTEGER_64)
+		require
+			executable_present: not a_executable.is_empty
+			positive_timeout: a_timeout_ms > 0
 		local
 			factory: PROCESS_FACTORY
 			process: PROCESS
@@ -85,6 +101,8 @@ feature -- Execution
 			else
 				create last_result.make (False, False, -1, "", "process launch failed")
 			end
+		ensure
+			result_recorded: last_result /= old last_result
 		rescue
 			create last_result.make (False, False, -1, "", "unexpected process launch failure")
 		end
@@ -104,6 +122,8 @@ feature -- Shell selection
 			else
 				Result := "bash"
 			end
+		ensure
+			executable_present: not Result.is_empty
 		end
 
 	powershell_executable: STRING_32
@@ -113,6 +133,8 @@ feature -- Shell selection
 			else
 				Result := "powershell.exe"
 			end
+		ensure
+			executable_present: not Result.is_empty
 		end
 
 feature {NONE} -- Shared environment

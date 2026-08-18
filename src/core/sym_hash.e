@@ -26,6 +26,7 @@ feature -- Hashing
 			Result.to_lower
 		ensure
 			length: Result.count = 64
+			lowercase_hexadecimal: is_lowercase_hexadecimal (Result)
 		end
 
 	sha_256_64 (a_value: READABLE_STRING_GENERAL): STRING_8
@@ -34,6 +35,8 @@ feature -- Hashing
 			Result := sha_256_hex (a_value).substring (1, 16)
 		ensure
 			length: Result.count = 16
+			lowercase_hexadecimal: is_lowercase_hexadecimal (Result)
+			sha_256_prefix: sha_256_hex (a_value).starts_with (Result)
 		end
 
 feature {NONE} -- Implementation
@@ -43,5 +46,16 @@ feature {NONE} -- Implementation
 			create Result
 		end
 
-end
+	is_lowercase_hexadecimal (a_value: READABLE_STRING_8): BOOLEAN
+		local
+			i: INTEGER
+		do
+			Result := not a_value.is_empty
+			from i := 1 until i > a_value.count or else not Result loop
+				Result := (a_value [i] >= '0' and then a_value [i] <= '9') or else
+					(a_value [i] >= 'a' and then a_value [i] <= 'f')
+				i := i + 1
+			end
+		end
 
+end

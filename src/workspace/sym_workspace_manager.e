@@ -12,6 +12,8 @@ feature {NONE} -- Initialization
 	make
 		do
 			create shell.make
+		ensure
+			idle: workspace = Void and error = Void and warning = Void and not is_success
 		end
 
 feature -- Result
@@ -26,16 +28,23 @@ feature -- Result
 	is_success: BOOLEAN
 		do
 			Result := workspace /= Void and error = Void
+		ensure
+			definition: Result = (workspace /= Void and error = Void)
 		end
 
 	set_event_handler (a_handler: detachable PROCEDURE [SYM_AGENT_EVENT])
 		do
 			event_handler := a_handler
+		ensure
+			handler_set: event_handler = a_handler
 		end
 
 feature -- Lifecycle
 
 	create_for_issue (a_identifier: READABLE_STRING_GENERAL; a_config: SYM_CONFIG)
+		require
+			identifier_present: not a_identifier.is_empty
+			config_valid: a_config.is_valid
 		local
 			root_dir, issue_dir: DIRECTORY
 			p: detachable PATH
@@ -84,7 +93,7 @@ feature -- Lifecycle
 							set_error ("workspace_error", "Could not create per-issue workspace")
 						elseif not safety.is_existing_workspace_directory (a_config.workspace_root, path) then
 							set_error ("workspace_path_escape", "Workspace containment check failed")
-						elseif created_now and attached a_config.after_create_hook as hook and then not strings.is_blank (hook) then
+						elseif error = Void and then created_now and attached a_config.after_create_hook as hook and then not strings.is_blank (hook) then
 							if not mark_incomplete (path) then
 								set_error ("workspace_error", "Could not mark the new workspace as incomplete")
 								if safety.is_existing_workspace_directory (a_config.workspace_root, path) then issue_dir.recursive_delete end
@@ -114,18 +123,23 @@ feature -- Lifecycle
 									end
 								end
 							end
-						else
+						elseif error = Void then
 							create workspace.make (path, key, created_now)
 						end
 					end
 				end
 			end
+		ensure
+			complete_result: (workspace /= Void) = (error = Void)
+			warning_cleared: warning = Void
 		rescue
 			workspace := Void
 			set_error ("workspace_error", "Unexpected workspace creation failure")
 		end
 
 	run_before_run (a_workspace: SYM_WORKSPACE; a_config: SYM_CONFIG): BOOLEAN
+		require
+			config_valid: a_config.is_valid
 		do
 			error := Void
 			warning := Void
@@ -144,10 +158,15 @@ feature -- Lifecycle
 				end
 				if attached error as hook_error then emit_hook_event ("before_run", "failed", hook_error) else emit_hook_event ("before_run", "completed", Void) end
 			end
+		ensure
+			result_matches_error: Result = (error = Void)
+			warning_cleared: warning = Void
 		end
 
 	run_after_run (a_workspace: SYM_WORKSPACE; a_config: SYM_CONFIG)
 			-- Best effort by contract.
+		require
+			config_valid: a_config.is_valid
 		do
 			warning := Void
 			if attached a_config.after_run_hook as hook and then not strings.is_blank (hook) then
@@ -165,9 +184,14 @@ feature -- Lifecycle
 					emit_hook_event ("after_run", "failed", warning)
 				end
 			end
+		ensure
+			fatal_error_unchanged: error = old error
 		end
 
 	remove_for_issue (a_identifier: READABLE_STRING_GENERAL; a_config: SYM_CONFIG)
+		require
+			identifier_present: not a_identifier.is_empty
+			config_valid: a_config.is_valid
 		local
 			p: detachable PATH
 			d: DIRECTORY
@@ -203,6 +227,8 @@ feature -- Lifecycle
 			else
 				set_error ("workspace_path_escape", "Refusing to remove path outside workspace.root")
 			end
+		ensure
+			workspace_result_unchanged: workspace = old workspace
 		rescue
 			set_error ("workspace_remove_error", "Unexpected workspace cleanup failure")
 		end

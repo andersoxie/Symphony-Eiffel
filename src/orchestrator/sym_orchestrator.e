@@ -21,6 +21,13 @@ feature {NONE} -- Initialization
 			create completed.make (10)
 			create stop_lock.make
 			apply_workflow_candidate
+		ensure
+			store_set: store = a_store
+			logger_set: logger = a_logger
+			no_running_workers: running.is_empty
+			no_claimed_issues: claimed.is_empty
+			no_pending_retries: retries.is_empty
+			no_completed_issues: completed.is_empty
 		end
 
 feature -- Status
@@ -28,6 +35,10 @@ feature -- Status
 	is_ready: BOOLEAN
 		do
 			Result := effective_workflow /= Void and then effective_config /= Void and then tracker /= Void and then last_error = Void
+		ensure
+			definition:
+				Result = (effective_workflow /= Void and then effective_config /= Void and then
+					tracker /= Void and then last_error = Void)
 		end
 
 	last_error: detachable SYM_ERROR
@@ -35,11 +46,17 @@ feature -- Status
 	running_count: INTEGER
 		do
 			Result := running.count
+		ensure
+			exact: Result = running.count
+			non_negative: Result >= 0
 		end
 
 	retrying_count: INTEGER
 		do
 			Result := retries.count
+		ensure
+			exact: Result = retries.count
+			non_negative: Result >= 0
 		end
 
 	input_tokens, output_tokens, total_tokens: INTEGER_64
@@ -57,6 +74,8 @@ feature -- Status
 				end
 			end
 			Result := elapsed_ms // 1_000
+		ensure
+			non_negative: Result >= 0
 		end
 
 	codex_rate_limits: detachable JSON_OBJECT
@@ -65,6 +84,9 @@ feature -- Status
 feature -- Service lifecycle
 
 	run
+		require
+			no_active_workers: running_count = 0
+			no_pending_retries: retrying_count = 0
 		local
 			next_poll_ms, now_ms, interval_ms: INTEGER_64
 		do
@@ -88,6 +110,9 @@ feature -- Service lifecycle
 				end
 				shutdown_workers
 			end
+		ensure
+			workers_released: running.is_empty
+			retries_released: retries.is_empty
 		rescue
 			request_stop_safely
 			shutdown_workers_safely
@@ -95,6 +120,9 @@ feature -- Service lifecycle
 
 	run_once
 			-- Run one poll/reconciliation cycle, then wait for work started by it.
+		require
+			no_active_workers: running_count = 0
+			no_pending_retries: retrying_count = 0
 		local
 			next_reconciliation_ms, now_ms: INTEGER_64
 		do
@@ -120,6 +148,9 @@ feature -- Service lifecycle
 				end
 				release_all_retries
 			end
+		ensure
+			workers_released: running.is_empty
+			retries_released: retries.is_empty
 		rescue
 			request_stop_safely
 			shutdown_workers_safely
@@ -136,6 +167,8 @@ feature -- Service lifecycle
 				stop_lock.unlock
 				locked := False
 			end
+		ensure
+			stop_requested: is_stop_requested
 		rescue
 			if locked then stop_lock.unlock end
 			retried := True
@@ -722,5 +755,12 @@ feature {NONE} -- State
 		once
 			create Result
 		end
+
+invariant
+	input_tokens_non_negative: input_tokens >= 0
+	output_tokens_non_negative: output_tokens >= 0
+	total_tokens_non_negative: total_tokens >= 0
+	ended_runtime_non_negative: ended_runtime_ms >= 0
+	rate_limit_update_non_negative: rate_limit_update_ms >= 0
 
 end

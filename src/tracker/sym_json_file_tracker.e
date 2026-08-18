@@ -17,6 +17,10 @@ feature {NONE} -- Initialization
 			create source_path.make_empty
 			create last_issues.make (0)
 			create codec.make
+		ensure
+			source_unset: source_path.is_empty
+			issues_empty: last_issues.is_empty
+			no_error: last_error = Void
 		end
 
 feature -- Access
@@ -50,6 +54,8 @@ feature -- Contract
 			else
 				create last_error.make ("invalid_tracker_config", "json_file provider requires a non-empty path")
 			end
+		ensure then
+			success_has_source: last_error = Void implies not source_path.is_empty
 		end
 
 	fetch_issues_by_states (a_states: LIST [STRING_32])
@@ -59,6 +65,11 @@ feature -- Contract
 			if not a_states.is_empty then
 				read_and_filter (a_states, Void)
 			end
+		ensure then
+			successful_items_match: last_error = Void implies
+				(across last_issues as issue_cursor all
+					normalized_has (a_states, issue_cursor.item.state)
+				end)
 		end
 
 	fetch_issues_by_ids (a_ids: LIST [STRING_32])
@@ -68,6 +79,11 @@ feature -- Contract
 			if not a_ids.is_empty then
 				read_and_filter (Void, a_ids)
 			end
+		ensure then
+			successful_items_match: last_error = Void implies
+				(across last_issues as issue_cursor all
+					exact_has (a_ids, issue_cursor.item.id)
+				end)
 		end
 
 feature {NONE} -- Reading
@@ -136,6 +152,7 @@ feature {NONE} -- Reading
 			end
 		rescue
 			if attached f as open_file and then open_file.is_open_read then open_file.close end
+			last_issues.wipe_out
 			create last_error.make ("tracker_request", "Unexpected error while reading JSON tracker file")
 		end
 

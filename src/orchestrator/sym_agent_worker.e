@@ -23,6 +23,9 @@ feature {NONE} -- Initialization
 		a_tracker: SYM_TRACKER_GATEWAY;
 		a_logger: SYM_LOGGER
 	)
+		require
+			attempt_positive_when_attached:
+				attached a_attempt as value implies value.item >= 1
 		do
 			thread_make
 			issue := a_issue
@@ -36,6 +39,18 @@ feature {NONE} -- Initialization
 			create last_event.make_empty
 			started_at_ms := clock.monotonic_milliseconds
 			last_activity_ms := started_at_ms
+		ensure
+			issue_set: issue = a_issue
+			attempt_copied:
+				(attached a_attempt as source implies
+					attached attempt as stored and then stored.item = source.item) and then
+				(a_attempt = Void implies attempt = Void)
+			workflow_set: workflow = a_workflow
+			config_set: config = a_config
+			tracker_set: tracker = a_tracker
+			logger_set: logger = a_logger
+			clock_initialized: started_at_ms >= 0 and last_activity_ms = started_at_ms
+			empty_session: session_id.is_empty
 		end
 
 feature -- Status snapshots
@@ -53,6 +68,8 @@ feature -- Status snapshots
 				state_lock.unlock
 				locked := False
 			end
+		ensure
+			non_negative: Result >= 0
 		rescue
 			if locked then state_lock.unlock end
 			retried := True
@@ -72,6 +89,8 @@ feature -- Status snapshots
 				state_lock.unlock
 				locked := False
 			end
+		ensure
+			snapshot_not_aliased: Result /= session_id
 		rescue
 			if locked then state_lock.unlock end
 			retried := True
@@ -89,6 +108,8 @@ feature -- Status snapshots
 				state_lock.unlock
 				locked := False
 			end
+		ensure
+			non_negative: Result >= 0
 		rescue
 			if locked then state_lock.unlock end
 			retried := True
@@ -108,6 +129,8 @@ feature -- Status snapshots
 				state_lock.unlock
 				locked := False
 			end
+		ensure
+			snapshot_not_aliased: Result /= last_event
 		rescue
 			if locked then state_lock.unlock end
 			retried := True
@@ -125,6 +148,8 @@ feature -- Status snapshots
 				state_lock.unlock
 				locked := False
 			end
+		ensure
+			non_negative: Result >= 0
 		rescue
 			if locked then state_lock.unlock end
 			retried := True
@@ -142,6 +167,8 @@ feature -- Status snapshots
 				state_lock.unlock
 				locked := False
 			end
+		ensure
+			non_negative: Result >= 0
 		rescue
 			if locked then state_lock.unlock end
 			retried := True
@@ -159,6 +186,8 @@ feature -- Status snapshots
 				state_lock.unlock
 				locked := False
 			end
+		ensure
+			non_negative: Result >= 0
 		rescue
 			if locked then state_lock.unlock end
 			retried := True
@@ -177,6 +206,9 @@ feature -- Status snapshots
 				state_lock.unlock
 				locked := False
 			end
+		ensure
+			attached_snapshot_is_json_object:
+				attached Result as value implies not value.representation.is_empty
 		rescue
 			if locked then state_lock.unlock end
 			retried := True
@@ -194,6 +226,8 @@ feature -- Status snapshots
 				state_lock.unlock
 				locked := False
 			end
+		ensure
+			non_negative: Result >= 0
 		rescue
 			if locked then state_lock.unlock end
 			retried := True
@@ -211,6 +245,9 @@ feature -- Status snapshots
 				state_lock.unlock
 				locked := False
 			end
+		ensure
+			attached_outcome_is_consistent:
+				attached Result as value implies value.turn_count >= 0
 		rescue
 			if locked then state_lock.unlock end
 			retried := True
@@ -233,6 +270,8 @@ feature -- Control
 				locked := False
 				if attached active_runner as value then value.cancel end
 			end
+		ensure
+			cancellation_recorded: cancel_requested
 		rescue
 			if locked then state_lock.unlock end
 			retried := True
@@ -388,5 +427,14 @@ feature {NONE} -- Attempt snapshot
 		once
 			create Result
 		end
+
+invariant
+	started_at_non_negative: started_at_ms >= 0
+	last_activity_non_negative: last_activity_ms >= 0
+	turn_count_non_negative: turn_count >= 0
+	input_tokens_non_negative: input_token_count >= 0
+	output_tokens_non_negative: output_token_count >= 0
+	total_tokens_non_negative: total_token_count >= 0
+	rate_limit_update_non_negative: rate_limit_update_ms >= 0
 
 end

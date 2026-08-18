@@ -17,6 +17,8 @@ feature {NONE} -- Initialization
 			create line_breaks.make (16)
 			create flow_text.make_empty
 			create error_message.make_empty
+		ensure
+			idle: not is_valid and root = Void and error_message.is_empty
 		end
 
 feature -- Access
@@ -41,8 +43,6 @@ feature -- Basic operation
 			-- configuration rather than the complete YAML specification: block maps and
 			-- sequences, flow collections, strings, booleans, nulls, decimal integers,
 			-- comments, and literal/folded block strings.
-		require
-			a_yaml_attached: a_yaml /= Void
 		local
 			l_value: detachable JSON_VALUE
 			l_object: JSON_OBJECT
@@ -90,7 +90,8 @@ feature -- Basic operation
 				root := Void
 			end
 		ensure
-			valid_has_root: is_valid implies root /= Void
+			valid_exactly_when_root_available: is_valid = (root /= Void)
+			valid_has_no_error: is_valid implies error_message.is_empty
 			invalid_has_message: not is_valid implies not error_message.is_empty
 		end
 
@@ -1269,10 +1270,8 @@ feature {NONE} -- Parser state
 	flow_line: INTEGER
 
 invariant
-	lines_attached: lines /= Void
-	line_breaks_attached: line_breaks /= Void
 	line_metadata_aligned: line_breaks.count = lines.count
-	error_message_attached: error_message /= Void
-	flow_text_attached: flow_text /= Void
+	valid_root_consistent: is_valid implies root /= Void
+	error_state_consistent: not error_message.is_empty implies not is_valid
 
 end

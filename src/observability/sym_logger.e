@@ -16,58 +16,96 @@ feature {NONE} -- Initialization
 			log_file_path := a_log_file
 			create clock
 			create write_lock.make
+		ensure
+			log_file_set: log_file_path = a_log_file
+			file_sink_available: not file_sink_failed
 		end
 
 	make_stdout
 			-- Log only to stdout.
 		do
 			make (Void)
+		ensure
+			stdout_only: not has_file_sink
+			file_sink_available: not file_sink_failed
 		end
 
 feature -- Levels
 
 	log_debug (a_event, a_message: READABLE_STRING_GENERAL; a_context: detachable SYM_LOG_CONTEXT)
+		require
+			event_present: not a_event.is_empty
 		do
 			log (debug_level, a_event, a_message, a_context, Void)
+		ensure
+			file_failure_is_sticky: old file_sink_failed implies file_sink_failed
 		end
 
 	log_debug_with_fields (a_event, a_message: READABLE_STRING_GENERAL;
 		a_context: detachable SYM_LOG_CONTEXT; a_fields: detachable JSON_OBJECT)
+		require
+			event_present: not a_event.is_empty
 		do
 			log (debug_level, a_event, a_message, a_context, a_fields)
+		ensure
+			file_failure_is_sticky: old file_sink_failed implies file_sink_failed
 		end
 
 	info (a_event, a_message: READABLE_STRING_GENERAL; a_context: detachable SYM_LOG_CONTEXT)
+		require
+			event_present: not a_event.is_empty
 		do
 			log (info_level, a_event, a_message, a_context, Void)
+		ensure
+			file_failure_is_sticky: old file_sink_failed implies file_sink_failed
 		end
 
 	info_with_fields (a_event, a_message: READABLE_STRING_GENERAL;
 		a_context: detachable SYM_LOG_CONTEXT; a_fields: detachable JSON_OBJECT)
+		require
+			event_present: not a_event.is_empty
 		do
 			log (info_level, a_event, a_message, a_context, a_fields)
+		ensure
+			file_failure_is_sticky: old file_sink_failed implies file_sink_failed
 		end
 
 	warning (a_event, a_message: READABLE_STRING_GENERAL; a_context: detachable SYM_LOG_CONTEXT)
+		require
+			event_present: not a_event.is_empty
 		do
 			log (warning_level, a_event, a_message, a_context, Void)
+		ensure
+			file_failure_is_sticky: old file_sink_failed implies file_sink_failed
 		end
 
 	warning_with_fields (a_event, a_message: READABLE_STRING_GENERAL;
 		a_context: detachable SYM_LOG_CONTEXT; a_fields: detachable JSON_OBJECT)
+		require
+			event_present: not a_event.is_empty
 		do
 			log (warning_level, a_event, a_message, a_context, a_fields)
+		ensure
+			file_failure_is_sticky: old file_sink_failed implies file_sink_failed
 		end
 
 	error (a_event, a_message: READABLE_STRING_GENERAL; a_context: detachable SYM_LOG_CONTEXT)
+		require
+			event_present: not a_event.is_empty
 		do
 			log (error_level, a_event, a_message, a_context, Void)
+		ensure
+			file_failure_is_sticky: old file_sink_failed implies file_sink_failed
 		end
 
 	error_with_fields (a_event, a_message: READABLE_STRING_GENERAL;
 		a_context: detachable SYM_LOG_CONTEXT; a_fields: detachable JSON_OBJECT)
+		require
+			event_present: not a_event.is_empty
 		do
 			log (error_level, a_event, a_message, a_context, a_fields)
+		ensure
+			file_failure_is_sticky: old file_sink_failed implies file_sink_failed
 		end
 
 feature -- Logging
@@ -84,18 +122,26 @@ feature -- Logging
 			l_line := event_line (a_level, a_event, a_message, a_context, a_fields)
 			l_line.append_character ('%N')
 			emit_line (l_line)
+		ensure
+			file_failure_is_sticky: old file_sink_failed implies file_sink_failed
 		end
 
 	redacted_fields (a_fields: JSON_OBJECT): JSON_OBJECT
 			-- Deep copy of `a_fields' with values below secret-looking keys redacted.
 		do
 			Result := sanitized_object (a_fields)
+		ensure
+			independent_copy: Result /= a_fields
+			field_count_preserved: Result.count = a_fields.count
 		end
 
 	is_secret_key (a_key: READABLE_STRING_GENERAL): BOOLEAN
 			-- Is `a_key' a known or conventionally named secret field?
 		do
 			Result := secret_keys.is_secret_key (a_key)
+		ensure
+			empty_key_is_not_secret: a_key.is_empty implies not Result
+			canonical_token_is_secret: a_key.same_string ("token") implies Result
 		end
 
 feature -- Status
@@ -109,6 +155,8 @@ feature -- Status
 	has_file_sink: BOOLEAN
 		do
 			Result := attached log_file_path
+		ensure
+			sink_definition: Result = (log_file_path /= Void)
 		end
 
 feature {NONE} -- Event construction

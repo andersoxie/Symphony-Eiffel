@@ -16,6 +16,9 @@ feature {NONE} -- Initialization
 				issues.extend (cursor.item)
 			end
 			error := a_error
+		ensure
+			error_set: error = a_error
+			fresh_issue_container: issues /= a_issues
 		end
 
 feature -- Access
@@ -27,7 +30,8 @@ feature -- Access
 	is_success: BOOLEAN
 		do
 			Result := error = Void
+		ensure
+			definition: Result = (error = Void)
 		end
 
 end
-

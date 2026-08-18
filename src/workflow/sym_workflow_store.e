@@ -14,6 +14,10 @@ feature {NONE} -- Initialization
 			path := a_path.canonical_path
 			create loader.make
 			reload
+		ensure
+			path_canonicalized: path.is_equal (a_path.canonical_path)
+			complete_initial_result: is_ready /= (last_error /= Void)
+			initial_success_is_change: is_ready implies changed
 		end
 
 feature -- Access
@@ -31,6 +35,8 @@ feature -- Access
 	is_ready: BOOLEAN
 		do
 			Result := workflow /= Void and config /= Void
+		ensure
+			definition: Result = (workflow /= Void and config /= Void)
 		end
 
 feature -- Reload
@@ -56,16 +62,29 @@ feature -- Reload
 			else
 				last_error := loader.error
 			end
+		ensure
+			usable_or_error: is_ready or last_error /= Void
+			change_is_successful: changed implies is_ready and last_error = Void
+			failure_preserves_workflow: last_error /= Void implies workflow = old workflow
+			failure_preserves_config: last_error /= Void implies config = old config
 		end
 
 	reload_if_changed
 			-- Content hashes make this a defensive reload even if file-system watch events are lost.
 		do
 			reload
+		ensure
+			usable_or_error: is_ready or last_error /= Void
+			change_is_successful: changed implies is_ready and last_error = Void
+			failure_preserves_workflow: last_error /= Void implies workflow = old workflow
+			failure_preserves_config: last_error /= Void implies config = old config
 		end
 
 feature {NONE} -- Implementation
 
 	loader: SYM_WORKFLOW_LOADER
+
+invariant
+	effective_pair_consistent: (workflow = Void) = (config = Void)
 
 end

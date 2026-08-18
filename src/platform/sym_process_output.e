@@ -14,6 +14,9 @@ feature {NONE} -- Initialization
 			create mutex.make
 			create output.make_empty
 			create errors.make_empty
+		ensure
+			output_empty: output_snapshot.is_empty
+			error_empty: error_snapshot.is_empty
 		end
 
 feature -- Callbacks
@@ -27,6 +30,8 @@ feature -- Callbacks
 			append_bounded (output, a_chunk)
 			mutex.unlock
 			locked := False
+		ensure
+			output_bounded: output.count <= max_capture_bytes
 		rescue
 			if locked then mutex.unlock end
 		end
@@ -40,6 +45,8 @@ feature -- Callbacks
 			append_bounded (errors, a_chunk)
 			mutex.unlock
 			locked := False
+		ensure
+			error_bounded: errors.count <= max_capture_bytes
 		rescue
 			if locked then mutex.unlock end
 		end
@@ -55,6 +62,9 @@ feature -- Snapshots
 			Result := output.twin
 			mutex.unlock
 			locked := False
+		ensure
+			bounded: Result.count <= max_capture_bytes
+			independent_copy: Result /= output
 		rescue
 			if locked then mutex.unlock end
 			create Result.make_empty
@@ -69,6 +79,9 @@ feature -- Snapshots
 			Result := errors.twin
 			mutex.unlock
 			locked := False
+		ensure
+			bounded: Result.count <= max_capture_bytes
+			independent_copy: Result /= errors
 		rescue
 			if locked then mutex.unlock end
 			create Result.make_empty

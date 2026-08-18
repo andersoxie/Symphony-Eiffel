@@ -11,6 +11,8 @@ feature -- Result
 feature -- Factory
 
 	new_adapter (a_config: SYM_CONFIG): detachable SYM_TRACKER_ADAPTER
+		require
+			config_valid: a_config.is_valid
 		local
 			memory: SYM_MEMORY_TRACKER
 			file_tracker: SYM_JSON_FILE_TRACKER
@@ -27,11 +29,18 @@ feature -- Factory
 			else
 				create last_error.make ("unsupported_tracker_kind", "Unsupported tracker.kind: " + a_config.tracker_kind)
 			end
+		ensure
+			complete_result: (Result /= Void) /= (last_error /= Void)
+			adapter_validated: attached Result as adapter_result implies adapter_result.last_call_succeeded
+			supported_result: attached Result as adapter_result implies is_supported (adapter_result.kind)
 		end
 
 	is_supported (a_kind: READABLE_STRING_GENERAL): BOOLEAN
 		do
 			Result := a_kind.is_case_insensitive_equal ("memory") or else a_kind.is_case_insensitive_equal ("json_file")
+		ensure
+			definition: Result = (a_kind.is_case_insensitive_equal ("memory") or else
+				a_kind.is_case_insensitive_equal ("json_file"))
 		end
 
 end

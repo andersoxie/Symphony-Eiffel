@@ -9,6 +9,8 @@ feature -- Time
 	now_utc: DATE_TIME
 		do
 			create Result.make_now_utc
+		ensure
+			valid_calendar_year: Result.year > 0
 		end
 
 	now_epoch_milliseconds: INTEGER_64
@@ -19,6 +21,8 @@ feature -- Time
 			create n.make_now_utc
 			d := n.relative_duration (unix_epoch)
 			Result := (d.fine_seconds_count * 1000.0).truncated_to_integer_64
+		ensure
+			non_negative: Result >= 0
 		end
 
 	monotonic_milliseconds: INTEGER_64
@@ -27,11 +31,15 @@ feature -- Time
 			"C inline use <sym_monotonic.h>"
 		alias
 			"return (EIF_INTEGER_64) sym_monotonic_milliseconds();"
+		ensure
+			non_negative: Result >= 0
 		end
 
 	iso_8601_now: STRING_8
 		do
 			Result := iso_8601 (now_utc)
+		ensure
+			rfc3339_millisecond_shape: is_rfc3339_millisecond (Result)
 		end
 
 	iso_8601 (a_time: DATE_TIME): STRING_8
@@ -55,7 +63,7 @@ feature -- Time
 			append_padded_integer (Result, l_ms, 3)
 			Result.append_character ('Z')
 		ensure
-			rfc3339_shape: Result.count = 24 and then Result [11] = 'T' and then Result [24] = 'Z'
+			rfc3339_millisecond_shape: is_rfc3339_millisecond (Result)
 		end
 
 feature {NONE} -- Implementation
@@ -82,6 +90,16 @@ feature {NONE} -- Implementation
 				text.prepend_character ('0')
 			end
 			a_target.append (text)
+		end
+
+	is_rfc3339_millisecond (a_value: READABLE_STRING_8): BOOLEAN
+			-- Does `a_value' have the fixed-width UTC representation emitted above?
+		do
+			Result := a_value.count = 24 and then
+				a_value [5] = '-' and then a_value [8] = '-' and then
+				a_value [11] = 'T' and then a_value [14] = ':' and then
+				a_value [17] = ':' and then a_value [20] = '.' and then
+				a_value [24] = 'Z'
 		end
 
 end

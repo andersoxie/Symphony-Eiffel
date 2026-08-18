@@ -15,6 +15,15 @@ feature {NONE} -- Initialization
 			create thread_id.make_empty
 			create turn_id.make_empty
 			create session_id.make_empty
+		ensure
+			thread_not_started: thread_id.is_empty
+			turn_not_started: turn_id.is_empty
+			session_not_started: session_id.is_empty
+			no_completed_turns: turn_count = 0
+			no_error: last_error = Void
+			no_event: last_event = Void
+			not_started: not is_started
+			no_live_process: not has_live_process
 		end
 
 feature -- Session state
@@ -36,22 +45,31 @@ feature -- Session state
 	is_started: BOOLEAN
 		do
 			Result := not thread_id.is_empty and transport.is_running
+		ensure
+			started_definition: Result = (not thread_id.is_empty and transport.is_running)
 		end
 
 	has_live_process: BOOLEAN
 			-- Does this client still own an app-server process that has not exited?
 		do
 			Result := transport.has_live_processes
+		ensure
+			live_process_definition: Result = transport.has_live_processes
 		end
 
 	set_event_handler (a_handler: detachable PROCEDURE [SYM_AGENT_EVENT])
 		do
 			event_handler := a_handler
+		ensure
+			handler_set: event_handler = a_handler
 		end
 
 feature -- Lifecycle
 
 	start_session (a_workspace: SYM_WORKSPACE; a_config: SYM_CONFIG; a_secret_names: ITERABLE [STRING_32])
+		require
+			idle: not has_live_process
+			valid_config: a_config.is_valid
 		local
 			request, params, capabilities, client_info: JSON_OBJECT
 		do
@@ -80,6 +98,9 @@ feature -- Lifecycle
 					start_thread (a_workspace, a_config)
 				end
 			end
+		ensure
+			thread_started_or_error: last_error /= Void or else not thread_id.is_empty
+			turn_count_unchanged: turn_count = old turn_count
 		end
 
 	stop_session
@@ -93,6 +114,9 @@ feature -- Lifecycle
 				turn_id.wipe_out
 				session_id.wipe_out
 			end
+		ensure
+			stopped_or_error: last_error /= Void or else
+				(not has_live_process and thread_id.is_empty and turn_id.is_empty and session_id.is_empty)
 		rescue
 			create last_error.make ("codex_termination_error",
 				"Unexpected failure while stopping app-server session")
@@ -101,6 +125,11 @@ feature -- Lifecycle
 feature -- Turns
 
 	run_turn (a_prompt: READABLE_STRING_GENERAL; a_issue: SYM_ISSUE; a_workspace: SYM_WORKSPACE; a_config: SYM_CONFIG)
+		require
+			valid_issue: a_issue.is_core_valid
+			valid_config: a_config.is_valid
+			workspace_is_direct_child: a_workspace.path.parent.canonical_path.is_equal (
+				a_config.workspace_root.canonical_path)
 		local
 			request, params, input_item: JSON_OBJECT
 			input: JSON_ARRAY
@@ -135,6 +164,11 @@ feature -- Turns
 					stream_turn (a_config)
 				end
 			end
+		ensure
+			turn_count_monotonic: turn_count >= old turn_count
+			at_most_one_turn_started: turn_count <= old turn_count + 1
+			started_turn_has_identity: turn_count > old turn_count implies
+				(not turn_id.is_empty and not session_id.is_empty)
 		end
 
 feature {NONE} -- Handshake

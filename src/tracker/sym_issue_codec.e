@@ -11,6 +11,8 @@ feature {NONE} -- Initialization
 
 	make
 		do
+		ensure
+			idle: issue = Void and error = Void
 		end
 
 feature -- Result
@@ -62,6 +64,9 @@ feature -- Result
 			else
 				create error.make ("tracker_response", "Issue record is missing id, identifier, title, state, or boolean dispatchable")
 			end
+		ensure
+			complete_result: (issue /= Void) /= (error /= Void)
+			decoded_issue_valid: attached issue as decoded_issue implies decoded_issue.is_core_valid
 		end
 
 feature {NONE} -- Helpers

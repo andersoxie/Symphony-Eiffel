@@ -18,6 +18,14 @@ feature {NONE} -- Initialization
 			create labels.make (0)
 			create blocked_by.make (0)
 			dispatchable := True
+		ensure
+			id_set: id.same_string_general (a_id)
+			identifier_set: identifier.same_string_general (a_identifier)
+			title_set: title.same_string_general (a_title)
+			state_set: state.same_string_general (a_state)
+			dispatchable_by_default: dispatchable
+			no_initial_labels: labels.is_empty
+			no_initial_blockers: blocked_by.is_empty
 		end
 
 feature -- Required fields
@@ -60,11 +68,16 @@ feature -- Status
 		do
 			Result := not strings.is_blank (id) and then not strings.is_blank (identifier) and then
 				not strings.is_blank (title) and then not strings.is_blank (state)
+		ensure
+			definition: Result = (not strings.is_blank (id) and then not strings.is_blank (identifier) and then
+				not strings.is_blank (title) and then not strings.is_blank (state))
 		end
 
 	normalized_state: STRING_32
 		do
 			Result := strings.normalized (state)
+		ensure
+			normalized: Result.same_string (strings.normalized (state))
 		end
 
 feature -- Element change
@@ -72,62 +85,100 @@ feature -- Element change
 	set_description (a_value: detachable READABLE_STRING_GENERAL)
 		do
 			if attached a_value as v then description := v.to_string_32.twin else description := Void end
+		ensure
+			value_set:
+				(attached a_value as source and then attached description as stored and then stored.same_string_general (source)) or else
+				(a_value = Void and then description = Void)
 		end
 
 	set_priority (a_value: detachable INTEGER_64_REF)
 		do
 			if attached a_value as v then priority := v.twin else priority := Void end
+		ensure
+			value_set:
+				(attached a_value as source and then attached priority as stored and then stored.item = source.item) or else
+				(a_value = Void and then priority = Void)
 		end
 
 	set_state (a_value: READABLE_STRING_GENERAL)
 		do
 			state := a_value.to_string_32.twin
+		ensure
+			state_set: state.same_string_general (a_value)
 		end
 
 	set_native_ref (a_value: detachable JSON_OBJECT)
 		do
 			native_ref := a_value
+		ensure
+			value_set: native_ref = a_value
 		end
 
 	set_branch_name (a_value: detachable READABLE_STRING_GENERAL)
 		do
 			if attached a_value as v then branch_name := v.to_string_32.twin else branch_name := Void end
+		ensure
+			value_set:
+				(attached a_value as source and then attached branch_name as stored and then stored.same_string_general (source)) or else
+				(a_value = Void and then branch_name = Void)
 		end
 
 	set_url (a_value: detachable READABLE_STRING_GENERAL)
 		do
 			if attached a_value as v then url := v.to_string_32.twin else url := Void end
+		ensure
+			value_set:
+				(attached a_value as source and then attached url as stored and then stored.same_string_general (source)) or else
+				(a_value = Void and then url = Void)
 		end
 
 	set_assignee_id (a_value: detachable READABLE_STRING_GENERAL)
 		do
 			if attached a_value as v then assignee_id := v.to_string_32.twin else assignee_id := Void end
+		ensure
+			value_set:
+				(attached a_value as source and then attached assignee_id as stored and then stored.same_string_general (source)) or else
+				(a_value = Void and then assignee_id = Void)
 		end
 
 	set_dispatchable (a_value: BOOLEAN)
 		do
 			dispatchable := a_value
+		ensure
+			value_set: dispatchable = a_value
 		end
 
 	set_labels (a_values: ITERABLE [READABLE_STRING_GENERAL])
 		do
 			labels := strings.normalized_labels (a_values)
+		ensure
+			fresh_container: labels /= a_values
+			value_comparison: labels.object_comparison
+			normalized_values: across labels as cursor all
+				not cursor.item.is_empty and then cursor.item.same_string (strings.normalized (cursor.item))
+			end
 		end
 
 	set_blocked_by (a_values: ITERABLE [SYM_BLOCKER])
 		do
 			create blocked_by.make (3)
 			across a_values as c loop blocked_by.extend (c.item) end
+		ensure
+			fresh_container: blocked_by /= a_values
 		end
 
 	set_created_at (a_value: detachable DATE_TIME)
 		do
 			created_at := a_value
+		ensure
+			value_set: created_at = a_value
 		end
 
 	set_updated_at (a_value: detachable DATE_TIME)
 		do
 			updated_at := a_value
+		ensure
+			value_set: updated_at = a_value
 		end
 
 feature -- Conversion
@@ -154,6 +205,8 @@ feature -- Conversion
 			Result.put_boolean (dispatchable, "dispatchable")
 			if attached created_at as v then Result.put_string (clock.iso_8601 (v), "created_at") else Result.put (Void, "created_at") end
 			if attached updated_at as v then Result.put_string (clock.iso_8601 (v), "updated_at") else Result.put (Void, "updated_at") end
+		ensure
+			stable_shape: Result.count = 15
 		end
 
 feature {NONE} -- Shared helpers
