@@ -1,4 +1,9 @@
 ---
+# Deterministic integration fixture: read-only local JSON plus fake Codex.
+# This profile requires no live GitHub access, gh login, or tracker credentials.
+# The production GitHub Issues profile is examples/github/WORKFLOW.md; see
+# README.md for setup. Switching tracker.kind to github requires host
+# authentication and a configured repository, changing this fixture behavior.
 tracker:
   kind: json_file
   provider:

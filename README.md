@@ -37,8 +37,9 @@ must be a map and duplicate keys are rejected.
   `SYMPHONY_BASH` to an explicit `bash.exe` when it is not discoverable.
 - A separately installed and authenticated Codex CLI whose `app-server` protocol matches this
   client.
-- For `tracker.kind: github`, GitHub CLI (`gh`) on `PATH`, with authentication configured separately
-  for the selected GitHub host.
+- For `tracker.kind: github`, GitHub CLI (`gh`) on `PATH`, supporting `api --paginate --slurp`, with
+  authentication configured separately for the selected GitHub host. The Git clone hook also needs
+  access to the selected repository through Git's credentials.
 
 Check the two main tools before building:
 
@@ -85,6 +86,12 @@ failures, including native C compiler failures that some Eiffel driver versions 
 their exit code. The `tests` target can also be opened in EiffelStudio and run from the AutoTest
 tool.
 
+The harness currently runs 37 tests. GitHub coverage includes configuration invalidation, fresh ID
+refreshes, multiple pages, pull-request exclusion, failure/recovery sequences, malformed and
+duplicate records, truncated output, and secret-name retention across adapter replacement. Queued CLI
+outcomes keep those tracker tests independent of GitHub credentials and network access. Separate
+real-process checks verify larger output capture, overflow reset, timeout, child exit, and reuse.
+
 After building, run the credential-free app-server integration fixture with:
 
 ```powershell
@@ -106,7 +113,15 @@ nonstandard location, or set `SYMPHONY_ECF` to a complete alternate project conf
 `symphony.ecf` directly in EiffelStudio still requires repairing the installation or file
 permissions; no machine-specific paths are stored in the checked-in configuration.
 
+On Windows, if the mock reports that the app-server exited before starting a session, check
+`bash --version` in the same execution context. A restricted Windows sandbox can prevent Git Bash
+from initializing with `0xC0000142` (exit code `-1073741502`). The mock integration must run in a host
+context that permits Git Bash to start; configuration validation does not exercise that boundary.
+
 ## Quick start
+
+See [How to start](How%20to%20start.md) for an operator guide, including GitHub setup and the handoff
+from an agent run to manual review.
 
 The example uses a local JSON tracker and creates a small Git repository for each new issue
 workspace. Inspect both files before running because workflow hooks are executable host commands.
@@ -134,6 +149,11 @@ read** permission for polling. See GitHub's
 [repository issues API](https://docs.github.com/en/rest/issues/issues#list-repository-issues).
 
 ```powershell
+# Configure or check the GitHub CLI login for this host before polling.
+gh --version
+gh auth login --hostname github.com
+gh auth status --hostname github.com
+
 # Configuration validation is local; it does not run gh or check credentials.
 & ./.build/eiffel/EIFGENs/symphony/W_code/symphony.exe `
   --validate ./examples/github/WORKFLOW.md
@@ -146,6 +166,11 @@ read** permission for polling. See GitHub's
 The GitHub example clones the configured repository into a `repository` subdirectory of each new
 issue workspace. This leaves room for Symphony's workspace initialization marker. Review the hook
 and prompt before running; `--once` can create workspaces and start real Codex sessions.
+
+The verified checks are the build, the 37-test harness, local example validation, and the mock
+app-server integration. They do not establish live GitHub authentication, repository access, or
+compatibility with every installed Codex version. Check those with a disposable issue before
+running a production queue.
 
 ### CLI modes
 
@@ -188,8 +213,21 @@ tracker:
 | `request_timeout_ms` | no | `30000` | Integer from `1` through `2147483647`, covering the complete `gh` request |
 
 Configure states using GitHub's `open` and `closed` names. The example dispatches open issues and
-cleans up workspaces when issues close. Use `required_labels` to select work for Symphony; the core
-applies the usual case-insensitive label matching after each read.
+treats closed issues as terminal. Terminal workspaces can be deleted during startup cleanup or
+when a running worker or scheduled retry observes closure. Closing an already unclaimed issue
+may leave its workspace until the next service startup. Use `required_labels` to select work for
+Symphony; the core applies the usual case-insensitive label matching after each read.
+
+For a review handoff with the supplied example, keep the issue open and remove its `symphony` label.
+The next successful refresh stops an active worker if it is no longer routable, and later polls
+will not dispatch it. Inspect the diff and checks, then preserve the results outside the disposable
+workspace before closing the issue. A commit stored only in that workspace can be deleted during
+terminal cleanup. Reapply the label to request more work on an open issue.
+
+`max_turns` limits one worker attempt. In continuous mode, an issue that remains open and has all
+required labels can run again after a successful attempt; completion does not automatically remove
+the label or close the issue. The local JSON example instead uses `dispatchable: false` or a
+non-active state such as `Review` for the handoff, followed by `Done` after results are preserved.
 
 The adapter invokes `gh api --paginate --slurp` for the configured host and repository, using
 `state=all` and `per_page=100`. The CLI follows every page; see the
@@ -225,10 +263,14 @@ variables, `GH_TOKEN`/`GITHUB_TOKEN` for GitHub.com and
 names through `secret_environment_names`, so the existing process boundary removes them from the
 Codex child environment. The shared tracker gateway retains the union of declared names across
 workflow reloads, protecting workers that launch after an adapter replacement. This does not
-isolate the CLI credential store: host credentials already
-available through `gh` configuration remain subject to the host's existing access controls. Do not
+isolate the CLI credential store: host credentials already available through `gh` configuration
+remain subject to the host's existing access controls. Do not
 put tokens in `WORKFLOW.md`, issue fields, or command strings. Validation only checks local
 configuration; authentication and repository access are checked when polling begins.
+
+For an enterprise host, set `provider.hostname`, authenticate `gh` for that same hostname, and
+update the clone URL in `after_create`. Changing `hostname` does not rewrite the hook. Polling with
+`gh` and cloning with Git are separate operations; configure repository access for both.
 
 | Error category | Meaning |
 | --- | --- |
@@ -378,8 +420,9 @@ the affected run rather than silently rendering empty text. Supported constructs
 - `{% for label in issue.labels %}...{% endfor %}`
 - `default`, `strip`, `downcase`, `upcase`, and `json` filters
 
-`issue` contains every normalized field documented under the JSON tracker. `attempt` is null on the
-first run and a positive integer on retries or continuations.
+`issue` has the same normalized field shape for every tracker. The GitHub and JSON tracker sections
+describe how their provider data maps to those fields; unmapped optional fields are null or empty.
+`attempt` is null on the first run and a positive integer on retries or continuations.
 
 ## Codex app-server compatibility
 

@@ -1,4 +1,9 @@
 ---
+# Credential-free local JSON profile; see README.md for tracker configuration.
+# For authenticated GitHub Issues polling, use examples/github/WORKFLOW.md.
+# Eligible JSON records start real Codex sessions. Set dispatchable to false
+# to poll without dispatch, or move work to Review for operator handoff.
+# Preserve workspace results before moving an issue into a terminal state.
 tracker:
   kind: json_file
   provider:
@@ -17,6 +22,8 @@ polling:
 
 hooks:
   timeout_ms: 60000
+  # This starter initializes an empty repository. For a real checkout, clone into
+  # a subdirectory; the workspace root contains an initialization marker.
   after_create: |-
     git init
   before_run: |-

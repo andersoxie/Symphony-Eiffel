@@ -1,190 +1,179 @@
-Use it as a **local task queue for Codex**:
+# How to start with Symphony-Eiffel
 
-`issues.json → Symphony → separate workspace per issue → Codex edits and tests files`
+Use Symphony as a **task queue for Codex**:
 
-[WORKFLOW.md](C:/Users/ander/Documents/ChatGPT/Symphonyh/examples/WORKFLOW.md) defines configuration and agent instructions. [issues.json](C:/Users/ander/Documents/ChatGPT/Symphonyh/examples/issues.json) supplies the tasks.
+`GitHub Issues or issues.json → Symphony → separate workspace per issue → Codex edits and tests files`
 
-**1. Start with the included demo**
+[WORKFLOW.md](examples/WORKFLOW.md) defines configuration and agent instructions. Use the
+[local JSON demo](examples/issues.json) for a first run, then the
+[GitHub Issues workflow](examples/github/WORKFLOW.md) for repository tasks. Both trackers are
+read-only from Symphony's perspective.
 
-You already have a compiled executable, and I verified that its example configuration passes validation. From this repository’s PowerShell terminal:
+## Quick start
 
-```powershell
-$symphony = ".\.build\eiffel\EIFGENs\symphony\W_code\symphony.exe"
+### 1. Build and run the local demo
 
-# Check configuration without starting Codex
-& $symphony --validate .\examples\WORKFLOW.md
-
-# Run one scheduling cycle and wait for its work to finish
-& $symphony --once .\examples\WORKFLOW.md
-```
-
-The second command starts a real Codex session. The example asks it to create `GREETING.md`, normally under:
-
-```text
-%TEMP%\symphony_workspaces\DEMO-1\
-```
-
-**One compatibility check first:** your installed Codex is `0.117.0`; the repository documents protocol validation against `0.130.0-alpha.5`. Compatibility with your installed version remains unverified. Configuration validation does not check Codex authentication or protocol compatibility.
-
-To rebuild and run the repository’s checks:
-
-```powershell
-.\scripts\build.ps1
-.\scripts\test.ps1
-.\scripts\integration-test.ps1
-```
-
-The integration test uses a mock Codex server.
-
-**2. Configure it for your own project**
-
-Copy the two example files into a configuration directory, then adjust:
-
-- **Workspace root:** choose a dedicated directory for disposable issue workspaces.
-- **`after_create` hook:** populate each workspace with your project. Clone into a child folder such as `repo`, and update the prompt and other hooks to work there. Cloning into `.` fails because Symphony places an initialization marker there.
-- **Prompt:** specify the project’s build/test commands, acceptance criteria, and expected output.
-- **Issues:** supply unique IDs and identifiers, clear descriptions, an active state such as `Todo`, the required `symphony` label, and `dispatchable: true`.
-
-Keep the example’s concurrency of one while establishing this workflow. `branch_name` is only a prompt hint; Symphony does not automatically create that branch.
-
-**3. Review and preserve results before closing an issue**
-
-A practical first workflow is:
-
-1. Run `--once`.
-2. Inspect the workspace, diff, tests, and JSONL logs.
-3. Set `dispatchable: false` while reviewing.
-4. Push or copy the results somewhere outside the disposable workspace.
-5. Set the issue’s state to `Done`.
-
-**Marking an issue terminal can cause its workspace to be deleted.** A commit stored only inside that workspace is not sufficient preservation.
-
-When ready, omit `--once` for continuous polling:
-
-```powershell
-& $symphony .\examples\WORKFLOW.md
-```
-
-Continuous mode can repeatedly run an issue that remains eligible—even after a successful attempt. You or an external process must update the JSON tracker. This implementation does not automatically update GitHub/Linear issues or open PRs, and `max_turns` limits each attempt rather than the issue’s total lifetime.
-
-
-
-Anders, **du bör använda Symphony-Eiffel som en arbetsledare för Codex: du lägger fram tydliga utvecklingsuppgifter, Symphony sköter körningarna och du granskar resultatet.** Du går alltså från att styra varje Codex-session till att styra *vilket arbete som ska göras och vad som krävs för att det ska godkännas*. Det är också grundidén i OpenAI:s Symphony. [OpenAI](https://openai.com/index/open-source-codex-orchestration-symphony/?utm_source=chatgpt.com)
-
-Jag har nu läst dokumentationen, exemplen och delar av körlogiken i `andersoxie/Symphony-Eiffel`. Nedan utgår jag från den version som ligger på `main`; jag har inte provkört din lokala installation.
-
-## 1. Vad din implementation faktiskt kan användas till
-
-Din version har redan de centrala delarna för att köra lokala Codex-uppdrag, men den har ett enklare operatörsgränssnitt än den ärendetavla som visas i OpenAI:s demonstration:
-
-| Del | Så fungerar det i din implementation |
-|---|---|
-| **Uppdragslista** | Uppgifterna läses från en lokal `issues.json`. Det finns ännu ingen direkt adapter för Jira, GitHub Issues eller Linear. |
-| **Arbetsinstruktioner** | `WORKFLOW.md` innehåller både körinställningar och instruktionen som Codex får tillsammans med ärendet. |
-| **Arbetskatalog** | Varje ärende får en separat arbetskatalog. En konfigurerad startåtgärd, en *hook*, kan exempelvis klona projektets Git-repo dit. |
-| **Utförande** | Symphony startar lokalt installerad Codex genom `codex app-server` och hanterar bland annat samtidighet och återförsök. |
-| **Uppföljning** | Du får strukturerade loggar. Statusändringar i ärenden och återrapportering av PR-länkar måste skötas separat. |
-
-Detta framgår av ditt repos dokumenterade profil och begränsningar. 
-
-**Att Symphony är skrivet i Eiffel betyder inte att uppdragen måste gälla Eiffel.** Det är orkestratorns implementationsspråk. Utifrån hur din version startar Codex i en arbetskatalog kan den även användas för exempelvis C#/.NET och Python, förutsatt att projektets bygg- och testverktyg finns tillgängliga där körningen sker. 
-
-## 2. Så skulle jag använda det i ditt dagliga arbete
-
-Min rekommendation är att behålla vanlig Codex-dialog för problemlösning, arkitektur och uppgifter som fortfarande behöver diskuteras. Använd Symphony när uppgiften är tillräckligt tydlig för att kunna lämnas över.
-
-Ett lämpligt uppdrag är exempelvis:
-
-> Lägg till tester för felaktiga indata i den angivna komponenten.  
-> Ändra inte komponentens publika gränssnitt.  
-> Kör projektets befintliga testkommando.  
-> Redovisa vilka tester som tillkommit, vilka kontroller som körts och eventuella kvarstående problem.
-
-Ett mindre lämpligt första uppdrag är:
-
-> Förbättra hela systemets arkitektur och säkerhet.
-
-Jag skulle börja med **ett projekt, en agent åt gången och manuell granskning efter varje körning**. Först när det fungerar stabilt skulle jag lägga upp en större kö eller öka parallelliteten.
-
-Arbetsfördelningen blir då:
-
-**Du bestämmer uppgiften och acceptanskriterierna → Symphony driver körningen → Codex ändrar och kontrollerar → du godkänner resultatet.**
-
-En överlämning till mänsklig granskning är helt förenlig med OpenAI:s specifikation; en lyckad körning behöver inte betyda att ärendet automatiskt ska bli `Done`. 
-
-## 3. Börja med den provkörning som redan finns i ditt repo
-
-Ditt repo innehåller redan ett lämpligt första test. Uppgiften `DEMO-1` ber Codex skapa `GREETING.md` med en välkomsttext och kontrollera innehållet. Exempelflödet skapar ett tomt Git-repo i ärendets arbetskatalog. **Det arbetar alltså inte på ditt befintliga projekt.** 
-
-### Bygg och kontrollera miljön
-
-För Windows/PowerShell, från roten i `Symphony-Eiffel`, finns följande dokumenterade kommandon:
+From the repository root in PowerShell:
 
 ```powershell
 ec -version
 codex --version
-
-# Behövs om du inte redan har en aktuell byggd version.
 .\scripts\build.ps1
 .\scripts\test.ps1
 .\scripts\integration-test.ps1
-```
 
-Kör dem stegvis och gå inte vidare med ett bygg- eller testfel. Körmiljön behöver även Bash och en installerad, autentiserad Codex CLI. På Windows nämner ditt repo Git for Windows som vanlig källa till Bash. 
-
-### Validera först, kör därefter ett uppdrag
-
-```powershell
 $symphony = ".\.build\eiffel\EIFGENs\symphony\W_code\symphony.exe"
 
-# Kontrollerar konfigurationen utan att starta Codex.
+# Validate configuration without polling, hooks, workspaces, or Codex.
 & $symphony --validate .\examples\WORKFLOW.md
 
-# Gör en urvals-/startomgång och inväntar arbetet som startades.
+# Run one scheduling cycle and wait for its work to finish.
 & $symphony --once .\examples\WORKFLOW.md
 ```
 
-`--validate` skapar inga arbetskataloger och kör inga hooks eller Codex-sessioner. **`--once` är däremot en riktig Codex-körning**, när det finns ett körbart ärende. 
+The second Symphony command starts a real Codex session when a demo issue is eligible. It asks
+Codex to create `GREETING.md`, normally below `%TEMP%\symphony_workspaces\DEMO-1\`. Inspect the
+file, diff, tests, and JSONL logs before accepting the result. The integration test uses a mock
+Codex app-server; it does not validate live GitHub access or Codex authentication.
 
-Kontrollera därefter att `GREETING.md` faktiskt skapades och att innehållet motsvarar uppdraget. Ett normalt programavslut är inte i sig ett godkännande av arbetsresultatet.
+The repository's protocol defaults and fixtures were validated against `codex-cli 0.130.0-alpha.5`.
+Check your installed version and follow the
+[compatibility guidance](README.md#codex-app-server-compatibility) before changing versions.
+Configuration validation does not check Codex authentication or protocol compatibility.
 
-**En viktig versionsdetalj:** din README anger att app-server-schemat verifierats mot `codex-cli 0.130.0-alpha.5`, och säger uttryckligen att alla Codex-versioner inte garanteras fungera. Kontrollera därför protokollkompatibiliteten vid uppgradering, snarare än att förutsätta att senaste CLI alltid passar den byggda klienten. 
+### 2. Select GitHub Issues or a local JSON queue
 
-## 4. Koppla sedan flödet till ett riktigt projekt
+For GitHub, copy [examples/github/WORKFLOW.md](examples/github/WORKFLOW.md) to a directory for
+your own configuration. Replace `YOUR-OWNER/YOUR-REPO` in both the provider and clone hook.
+Install GitHub CLI (`gh`) on `PATH` and authenticate it separately:
 
-Det viktigaste steget efter demonstrationen är att **låta arbetskatalogen innehålla projektets riktiga kod**.
-
-Gör en egen konfigurationskatalog, exempelvis `pilot`, och kopiera dit `examples/WORKFLOW.md` och `examples/issues.json`. Då kan du behålla originalexemplen oförändrade.
-
-### Hämta projektets kod i startåtgärden
-
-I kopian av `WORKFLOW.md` ersätter du `git init` i `hooks.after_create` med kloning av det projekt som uppgifterna gäller.
-
-För en första pilot kan Symphony arbeta på en separat kopia av sitt eget repo. Följande är ett **föreslaget Windows-exempel**, inte en ändring jag har gjort i ditt repo:
-
-```yaml
-workspace:
-  root: C:/SymphonyWorkspaces/pilot
-
-hooks:
-  timeout_ms: 60000
-
-  after_create: |-
-    git clone https://github.com/andersoxie/Symphony-Eiffel.git .
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-  before_run: |-
-    git status --short
-
-  after_run: |-
-    git status --short
+```powershell
+gh --version
+gh auth login --hostname github.com
+gh auth status --hostname github.com
 ```
 
-Behåll tills vidare exempelfilens övriga inställningar, särskilt en samtidig agent, `max_turns: 1` och sandbox-inställningarna. Din implementation kör `after_create` endast för en ny arbetskatalog; den klonar därför inte om projektet inför varje försök. Hooks körs dessutom på värddatorn, separat från Codex-sandboxen, så granska alltid deras innehåll. 
+The tracker settings are:
 
-### Lägg in ett avgränsat uppdrag
+```yaml
+tracker:
+  kind: github
+  provider:
+    repository: YOUR-OWNER/YOUR-REPO
+    hostname: github.com
+    request_timeout_ms: 30000
+  required_labels: [symphony]
+  active_states: [open]
+  terminal_states: [closed]
+```
 
-Ersätt innehållet i pilotens `issues.json` med exempelvis:
+Create or select an open issue with the `symphony` label, a clear description, and acceptance
+criteria. Review the workflow's hooks and prompt, then run it with `--validate` followed by
+`--once`. Validation is local; the first poll checks authentication and repository access.
+GitHub tasks in this profile are issues; Projects board statuses and task-list checkbox
+synchronization are not supported.
+
+For a local queue, copy [examples/WORKFLOW.md](examples/WORKFLOW.md) and
+[examples/issues.json](examples/issues.json) together. Each issue needs unique IDs and
+identifiers, an active state such as `Todo`, the `symphony` label, and `dispatchable: true`.
+
+For either tracker, choose a dedicated root for disposable issue workspaces. Populate each new
+workspace with an `after_create` hook. Clone into a child directory such as `repository`, then
+use `git -C repository ...` in hooks and tell the agent to work there. Cloning into `.` fails
+because Symphony places an initialization marker in the new workspace. Start with one agent
+and a prompt containing the project's build/test commands and expected output.
+
+See the [GitHub tracker reference](README.md#github-tracker) for pagination, issue mapping,
+authentication, timeout, response limits, and error handling. Keep tokens out of workflows,
+issue fields, and command strings. Symphony removes the four documented GitHub token environment
+variables from Codex's child environment, including names declared before workflow reloads;
+the host's existing `gh` credential-store access remains available under host access controls.
+
+### 3. Review and preserve results before closing an issue
+
+After `--once` finishes:
+
+1. Stop further dispatch while reviewing: remove the `symphony` label from an open GitHub issue,
+   or set a JSON issue to `"state": "Review"` and `"dispatchable": false`.
+2. Inspect the workspace, diff, test results, and logs.
+3. Push or copy the results somewhere outside the disposable workspace.
+4. Close the GitHub issue, or set the JSON issue's state to `Done`, only after preserving the result.
+
+**Marking an issue terminal can cause its workspace to be deleted.** A commit stored only inside
+that workspace is not sufficient preservation. An open GitHub issue without the required label
+is suitable for review without making it terminal.
+
+When ready, omit `--once` to poll continuously. An issue that remains eligible can run repeatedly,
+even after a successful attempt. `max_turns` limits one worker attempt, not the issue's total
+lifetime. Symphony does not automatically change issue states, post comments, or publish PRs.
+Handle those actions manually or through a separately configured workflow.
+
+## Svensk arbetsguide
+
+### 1. Vad Symphony gör
+
+Använd Symphony-Eiffel som en arbetsledare för Codex: du beskriver avgränsade utvecklingsuppgifter,
+Symphony sköter körningarna och du granskar resultatet.
+
+| Del | Så fungerar det |
+| --- | --- |
+| Uppdragslista | GitHub Issues via `tracker.kind: github`, en lokal `issues.json` via `json_file`, eller en minnesadapter för tester. |
+| Arbetsinstruktioner | `WORKFLOW.md` innehåller körinställningar och instruktionen som Codex får tillsammans med ärendet. |
+| Arbetskatalog | Varje ärende får en separat, tillfällig arbetskatalog. En hook kan klona projektets Git-repo i en underkatalog. |
+| Utförande | Symphony startar en separat installerad och autentiserad Codex CLI genom `codex app-server` och hanterar samtidighet och återförsök. |
+| Uppföljning | Strukturerade JSONL-loggar visar körningarna. Du eller en extern integration sköter ärendestatus, kommentarer och PR-publicering. |
+
+Eiffel är orkestratorns implementationsspråk. Uppdragen kan även gälla exempelvis C#/.NET eller
+Python, om projektets bygg- och testverktyg finns på kördatorn. Jira och Linear har ännu inga
+inbyggda adaptrar. GitHub-kopplingen läser ärenden; den synkroniserar inte GitHub Projects eller
+kryssrutor i uppgiftslistor.
+
+### 2. Börja med ett tydligt uppdrag och en agent
+
+Behåll vanlig Codex-dialog för problemlösning och uppgifter som fortfarande behöver diskuteras.
+Använd Symphony när uppgiften har tydliga gränser och acceptanskriterier. Ett lämpligt första
+uppdrag är:
+
+> Lägg till tester för felaktiga indata i den angivna komponenten. Ändra inte komponentens
+> publika gränssnitt. Kör projektets befintliga testkommando. Redovisa ändrade filer,
+> faktiskt utförda kontroller och eventuella kvarstående problem.
+
+Börja med ett projekt, en agent åt gången och manuell granskning efter varje engångskörning.
+Du bestämmer uppgiften och acceptanskriterierna, Symphony driver körningen och Codex ändrar och
+kontrollerar filerna. En lyckad körning innebär inte automatiskt att resultatet är godkänt.
+
+### 3. Bygg och prova den lokala demonstrationen
+
+Kör kommandona i den engelska snabbstarten ovan från repots rot. Kör dem stegvis och åtgärda
+bygg- eller testfel innan du fortsätter. Körmiljön behöver EiffelStudio med C-verktyg, PowerShell,
+Bash och en autentiserad Codex CLI; se [kraven i README](README.md#requirements).
+
+`--validate` kontrollerar konfigurationen utan att skapa eller ta bort arbetskataloger, köra
+hooks, kontakta GitHub eller starta Codex. `--once` gör däremot en riktig körning om ett ärende
+är körbart. Demonstrationen använder en lokal JSON-fil och skapar ett tomt Git-repo, så den
+arbetar inte i ditt befintliga projekt. Kontrollera att `GREETING.md` skapats och motsvarar
+uppdraget.
+
+Det dokumenterade app-server-schemat är verifierat mot `codex-cli 0.130.0-alpha.5`, vilket inte
+innebär att alla CLI-versioner fungerar. Följ [versionskontrollen i README](README.md#codex-app-server-compatibility)
+när Codex uppgraderas. Mocktestet kontrollerar klientprotokollet utan riktiga konton; en lokal
+validering eller ett mocktest bekräftar inte åtkomst till GitHub.
+
+### 4. Koppla flödet till ett riktigt projekt
+
+För GitHub Issues: kopiera [GitHub-exemplet](examples/github/WORKFLOW.md) till exempelvis
+`pilot/WORKFLOW.md`. Byt båda förekomsterna av `YOUR-OWNER/YOUR-REPO` till ditt repo. Kontrollera
+`gh --version`, logga in med `gh auth login --hostname github.com` och kontrollera med
+`gh auth status --hostname github.com`. Inga tokenvärden ska läggas i konfigurationen.
+
+Exemplet använder `open` som aktiv status, `closed` som terminal status och kräver etiketten
+`symphony`. Lägg etiketten på ett öppet ärende som du vill köra. GitHub-adaptern läser alla sidor
+och både öppna och stängda ärenden vid uppdateringar, så den kan upptäcka avslutade ärenden och
+borttagna etiketter. Pull requests som GitHub returnerar från ärende-API:et ignoreras. Etiketter
+filtreras lokalt. Fullständiga begränsningar finns i [referensen](README.md#github-tracker).
+
+För en lokal kö: kopiera i stället [JSON-flödet](examples/WORKFLOW.md) och
+[issues.json](examples/issues.json) till `pilot`. Ett avgränsat uppdrag kan se ut så här:
 
 ```json
 {
@@ -193,7 +182,7 @@ Ersätt innehållet i pilotens `issues.json` med exempelvis:
       "id": "pilot-001",
       "identifier": "PILOT-1",
       "title": "Dokumentera kontroll efter installation",
-      "description": "Skapa docs/SMOKE_TEST.md med en kort instruktion för att kontrollera en installation av Symphony-Eiffel. Utgå från README.md och befintliga scripts. Beskriv validering och en engångskörning. Ändra inga befintliga filer. Läs tillbaka dokumentet och kontrollera att filnamn och kommandon stämmer med repot. Skilj tydligt mellan kontroller du faktiskt har kört och kontroller som bara beskrivs.",
+      "description": "Skapa docs/SMOKE_TEST.md med en kort installationskontroll. Utgå från README.md och befintliga scripts. Beskriv validering och en engångskörning. Arbeta i underkatalogen repository. Ändra inga befintliga filer. Kontrollera filnamn och kommandon mot repot. Skilj mellan kontroller du kört och kontroller som bara beskrivs.",
       "state": "Todo",
       "labels": ["symphony"],
       "dispatchable": true
@@ -202,11 +191,36 @@ Ersätt innehållet i pilotens `issues.json` med exempelvis:
 }
 ```
 
-Formatet följer din JSON-adapter. Kombinationen av aktiv status, rätt etikett och `dispatchable: true` gör ärendet valbart i exempelflödet. 
+Om JSON-flödet ska arbeta på ett riktigt projekt, ersätt dess `git init` med en kloningshook.
+Följande Windows-exempel klonar Symphony-repot i en underkatalog:
 
-I Markdown-delen av `WORKFLOW.md` skulle jag också lägga till denna instruktion för piloten:
+```yaml
+workspace:
+  root: C:/SymphonyWorkspaces/pilot
 
-> Läs projektets AGENTS.md om den finns. Genomför endast det angivna uppdraget. Gör ingen commit, push, merge eller driftsättning. Lämna ändringarna för manuell granskning. Skriv en kort RESULTAT.md med ändrade filer, faktiskt utförda kontroller och eventuella hinder.
+hooks:
+  timeout_ms: 60000
+  after_create: |-
+    git clone https://github.com/andersoxie/Symphony-Eiffel.git repository
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  before_run: |-
+    git -C repository status --short
+  after_run: |-
+    git -C repository status --short
+```
+
+Kloning direkt i `.` fungerar inte eftersom Symphony lägger en initieringsmarkör där. Ange även
+i prompten att agenten ska göra ändringar och köra kontroller i `repository`. `after_create`
+körs bara när arbetskatalogen skapas; projektet klonas inte på nytt inför varje försök. Hooks
+körs på värddatorn utanför Codex-sandboxen, så granska dem som körbar kod.
+
+Behåll en samtidig agent och `max_turns: 1` under piloten. Lägg exempelvis till följande i
+Markdown-prompten:
+
+> Läs projektets AGENTS.md om den finns. Arbeta i underkatalogen repository. Genomför endast
+> det angivna uppdraget. Lämna ändringarna för manuell granskning. Gör ingen commit, push,
+> merge, driftsättning, GitHub-kommentar eller ärendestängning. Skriv en kort RESULTAT.md i
+> repository med ändrade filer, faktiskt utförda kontroller och eventuella hinder.
 
 Kör sedan:
 
@@ -215,42 +229,32 @@ Kör sedan:
 & $symphony --once .\pilot\WORKFLOW.md
 ```
 
-Det ger dig ett första verkligt uppdrag mot ett befintligt projekt, utan att automatiskt publicera förändringar.
+### 5. Överlämna till granskning innan ärendet avslutas
 
-## 5. Den viktigaste driftsfrågan: när ska Symphony sluta arbeta?
+Båda produktionsadaptrarna är skrivskyddade ur Symphonys perspektiv. En avslutad Codex-körning
+ändrar inte ärendets status. I kontinuerlig drift kan ett ärende som fortfarande är valbart
+köras igen, även efter ett lyckat försök. `max_turns` begränsar ett enskilt arbetsförsök.
 
-**I din nuvarande implementation betyder ”Codex är färdig med en körning” inte att ärendet automatiskt får en ny status.**
+| Källa | Stoppa fortsatt körning för granskning | Avsluta efter att resultatet säkrats |
+| --- | --- | --- |
+| GitHub Issues | Ta bort etiketten `symphony` och behåll ärendet öppet. | Stäng ärendet, vilket gör det terminalt enligt exemplet. |
+| Lokal JSON | Sätt `"state": "Review"` och `"dispatchable": false`. | Sätt status till `Done`, som är terminal i JSON-exemplet. |
 
-JSON-adaptern är skrivskyddad ur Symphonys perspektiv. I kontinuerlig drift schemalägger körlogiken dessutom en fortsättning efter en lyckad körning, och kan starta igen om ärendet fortfarande är aktivt och körbart. `max_turns: 1` begränsar alltså inte det totala antalet körningar för ett ärende under tjänstens livstid. 
+Gör granskningsändringen efter att `--once` avslutats och före nästa körning. Granska diff,
+kontroller och loggar, och spara sedan resultatet utanför den tillfälliga arbetskatalogen.
 
-Jag föreslår därför följande enkla statusmodell:
+**Stäng inte GitHub-ärendet och sätt inte `Done` innan resultatet är säkrat.** Terminala ärenden
+kan få sin arbetskatalog borttagen vid avstämning, även vid uppstart. En lokal commit som bara
+finns i arbetskatalogen räcker inte; kopiera resultatet eller pusha det till ett beständigt repo.
 
-| Status | Avsikt | Körbart? |
-|---|---|---|
-| `Backlog` | Uppgiften behöver förtydligas eller prioriteras. | Nej |
-| `Todo` | Du har godkänt uppgiften för bearbetning. | Ja |
-| `In Progress` | Arbetet pågår eller behöver fortsätta. | Ja |
-| `Review` | Resultatet väntar på din granskning. | Nej |
-| `Done` | Resultatet är godkänt och säkrat. | Nej; arbetskatalogen kan städas bort. |
+### 6. Bygg vidare från den fungerande kedjan
 
-Detta är mitt föreslagna arbetssätt. Statusövergångarna är **inte automatiskt implementerade** genom att du använder dessa namn. Exempelflödet har redan `Todo` och `In Progress` som aktiva statusar, medan `Done` är terminal. 
+GitHub Issues kan nu vara den direkta uppdragskällan. Nästa integrationssteg kan vara en separat,
+uttryckligt konfigurerad återrapportering som bevarar resultat, länkar en PR till rätt ärende och
+stoppar fortsatt körning under granskning. Den inbyggda adaptern skriver inte kommentarer,
+ändrar inte status och publicerar inte PR:er.
 
-Under piloten gör du därför följande manuellt efter att `--once` avslutats:
-
-Ändra ärendet till `"state": "Review"` och `"dispatchable": false` innan nästa körning. Granska därefter ändringarna och kontrollresultaten.
-
-**Sätt inte `Done` innan resultatet är sparat utanför den tillfälliga arbetskatalogen eller incheckat och säkrat i Git.** Din kod har uttrycklig städning av arbetskataloger för terminala ärenden, bland annat vid uppstart. En lokal commit som bara finns i den arbetskatalogen är inte tillräckligt skydd mot att katalogen tas bort. 
-
-## 6. Hur jag skulle bygga vidare för dig
-
-Eftersom du redan arbetar med Jira, GitHub och Jenkins skulle jag på sikt sikta på detta arbetsflöde:
-
-**Jira-ärende → Symphony/Codex → ändringsförslag och tester → GitHub-PR → din granskning → godkänd integration.**
-
-Men jag skulle **inte börja med att bygga om Symphony-kärnan**. Din nuvarande JSON-adapter ger en möjlig första integrationspunkt. Min rekommendation är en liten separat integrationsdel som hämtar godkända Jira-ärenden, skriver dem till `issues.json` och återrapporterar resultatet.
-
-Det behöver vara en koppling i båda riktningarna: enbart export från Jira till JSON löser inte överlämningen till granskning. Den delen måste också veta när arbetet ska stoppas, hur resultatet sparas och vilket ärende en PR tillhör. Din README beskriver både extern uppdatering av JSON-filen och att nätverksadaptrar och skrivverktyg ännu saknas. 
-
-För den fortsatta användningen skulle jag börja med dokumentation och tester i ett av dina utvecklingsprojekt. Därefter mindre felrättningar. Automatisk merge, driftsättning och ändringar med stora följdverkningar skulle jag hålla utanför den första fasen.
-
-**Mitt konkreta råd är alltså: kör först `DEMO-1` med `--once`, därefter ett riktigt men litet ärende mot en klon av projektet. När du har fått hela kedjan — uppdrag, körning, resultat och granskning — att fungera, är nästa värdefulla steg statusåterrapportering och Jira-koppling, inte fler parallella agenter.**
+För Jira behövs fortfarande en separat adapter eller en integration som exporterar ärenden till
+JSON-kön. En sådan integration behöver även hantera överlämning till granskning och säkra
+resultatet innan terminal städning. Börja med dokumentation och tester, gå vidare till mindre
+felrättningar och utöka parallelliteten när hela kedjan från uppdrag till granskning fungerar.

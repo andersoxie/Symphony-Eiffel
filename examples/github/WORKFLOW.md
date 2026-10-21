@@ -1,4 +1,11 @@
 ---
+# Read-only GitHub Issues profile; see README.md for configuration and lifecycle.
+# Authenticate gh on the host; polling uses gh api --paginate --slurp.
+# GitHub uses native open/closed states. Eligible open issues can run again
+# while they retain every required label, including after a successful turn.
+# Remove the symphony label for review; preserve workspace results before closing.
+# Polling does not post comments, publish pull requests, or close issues.
+# --validate checks local configuration only; --once can start real Codex sessions.
 tracker:
   kind: github
   provider:
@@ -13,7 +20,9 @@ polling:
   interval_ms: 30000
 
 # Omit workspace.root to use the system temporary directory.
-# Authenticate gh separately before polling. Replace both repository placeholders.
+# Replace YOUR-OWNER/YOUR-REPO in both the provider and clone hook.
+# For Enterprise, set provider.hostname and change the clone URL host too.
+# Clone into a subdirectory; the workspace root contains an initialization marker.
 hooks:
   timeout_ms: 60000
   after_create: |-
