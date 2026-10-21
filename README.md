@@ -5,16 +5,16 @@ Symphony Eiffel is a native Eiffel implementation of OpenAI's draft
 repository-owned `WORKFLOW.md`, polls a tracker, creates a contained workspace per issue, and drives
 Codex through the app-server JSONL protocol.
 
-This repository targets a practical local-production profile: a read-only JSON file is the tracker,
-workspaces and hooks run on the local host, and structured JSON Lines are the operator surface. It is
-not a general distributed workflow engine or a hosted control plane.
+This repository targets a practical local-production profile: GitHub Issues or a read-only JSON file
+is the tracker, workspaces and hooks run on the local host, and structured JSON Lines are the
+operator surface. It is not a general distributed workflow engine or a hosted control plane.
 
 ## Supported profile
 
 | Area | Included |
 | --- | --- |
 | Workflow | Markdown plus native YAML front matter, typed defaults, strict prompt rendering, reload support |
-| Trackers | `json_file` for local production/automation; `memory` for deterministic tests |
+| Trackers | `github` for repository issues; `json_file` for local production/automation; `memory` for deterministic tests |
 | Execution | Per-issue local workspaces, lifecycle hooks, Codex app-server over stdio JSONL |
 | Policy | Active/terminal states, required labels, global/per-state concurrency, retry backoff |
 | Observability | Structured JSONL events with issue and session context; secret-looking fields redacted |
@@ -37,6 +37,8 @@ must be a map and duplicate keys are rejected.
   `SYMPHONY_BASH` to an explicit `bash.exe` when it is not discoverable.
 - A separately installed and authenticated Codex CLI whose `app-server` protocol matches this
   client.
+- For `tracker.kind: github`, GitHub CLI (`gh`) on `PATH`, with authentication configured separately
+  for the selected GitHub host.
 
 Check the two main tools before building:
 
@@ -125,6 +127,26 @@ workspace. Inspect both files before running because workflow hooks are executab
 An eligible issue in `examples/issues.json` causes `--once` to launch a real Codex session. Set its
 `dispatchable` field to `false` if you only want to exercise tracker polling.
 
+For GitHub Issues, start with [`examples/github/WORKFLOW.md`](examples/github/WORKFLOW.md). Replace
+`YOUR-OWNER/YOUR-REPO` in both the provider and clone hook, authenticate `gh` separately, and select
+issues with the `symphony` label. A fine-grained token needs access to the repository with **Issues:
+read** permission for polling. See GitHub's
+[repository issues API](https://docs.github.com/en/rest/issues/issues#list-repository-issues).
+
+```powershell
+# Configuration validation is local; it does not run gh or check credentials.
+& ./.build/eiffel/EIFGENs/symphony/W_code/symphony.exe `
+  --validate ./examples/github/WORKFLOW.md
+
+# Poll GitHub and launch Codex for eligible open issues.
+& ./.build/eiffel/EIFGENs/symphony/W_code/symphony.exe `
+  --once ./examples/github/WORKFLOW.md
+```
+
+The GitHub example clones the configured repository into a `repository` subdirectory of each new
+issue workspace. This leaves room for Symphony's workspace initialization marker. Review the hook
+and prompt before running; `--once` can create workspaces and start real Codex sessions.
+
 ### CLI modes
 
 ```text
@@ -134,12 +156,94 @@ symphony [--validate | --once] [path-to-WORKFLOW.md]
 - With no path, Symphony selects `./WORKFLOW.md` in the process working directory.
 - `--validate` loads the workflow, checks the typed configuration and selected tracker profile, and
   exits. It deliberately does not create/remove workspaces, run hooks, poll for dispatch, or launch
-  Codex.
+  Codex. For GitHub, it does not invoke `gh`, make network requests, or verify authentication.
 - `--once` performs one scheduler reconciliation and dispatch pass instead of starting the recurring
   polling loop. Work accepted during that pass reaches orderly completion before shutdown.
 - With neither flag, Symphony starts the long-running polling service.
 - A clean validation or normal shutdown exits `0`; startup, validation, test, or abnormal host
   failures exit nonzero.
+
+## `github` tracker
+
+Use `tracker.kind: github` to poll issues from one GitHub repository. GitHub tasks are represented
+as issues in this profile; GitHub Projects board statuses and task-list checkbox synchronization
+are not supported.
+
+```yaml
+tracker:
+  kind: github
+  provider:
+    repository: YOUR-OWNER/YOUR-REPO
+    hostname: github.com
+    request_timeout_ms: 30000
+  required_labels: [symphony]
+  active_states: [open]
+  terminal_states: [closed]
+```
+
+| Provider key | Required | Default | Behavior |
+| --- | --- | --- | --- |
+| `repository` | yes | none | Repository in `owner/repo` form, normalized to lowercase |
+| `hostname` | no | `github.com` | GitHub host as a DNS name; no scheme, port, or path; normalized to lowercase |
+| `request_timeout_ms` | no | `30000` | Integer from `1` through `2147483647`, covering the complete `gh` request |
+
+Configure states using GitHub's `open` and `closed` names. The example dispatches open issues and
+cleans up workspaces when issues close. Use `required_labels` to select work for Symphony; the core
+applies the usual case-insensitive label matching after each read.
+
+The adapter invokes `gh api --paginate --slurp` for the configured host and repository, using
+`state=all` and `per_page=100`. The CLI follows every page; see the
+[`gh api` manual](https://cli.github.com/manual/gh_api). Each nonempty state or ID fetch reads the
+whole repository again and validates the complete result before returning issues. No cached issue
+list is required for ID refresh, including after a fresh adapter is created. There is no API-side
+label filter, so refreshes can observe closed issues and labels that were removed. Pull requests
+returned by the repository issues endpoint are ignored. Empty fetch inputs do not invoke `gh`.
+
+Capture is bounded to 16 MiB per output stream. An oversized response fails with `tracker_response`
+instead of publishing a truncated snapshot. Request timeout cleanup can take up to five additional
+seconds while the CLI process exits.
+
+GitHub issue fields map to the normalized model as follows:
+
+| Normalized field | GitHub value |
+| --- | --- |
+| `id` | `github:<hostname>:<database-id>` using the positive numeric issue `id` |
+| `identifier` | `<hostname>/<lowercase-owner/repo>#<number>` |
+| `title`, `state` | Issue title and `open`/`closed` state |
+| `description`, `url` | Optional `body` and `html_url` |
+| `labels` | Label names, trimmed, lowercased, and deduplicated |
+| `assignee_id` | Optional primary assignee's positive numeric `id`, as a string |
+| `created_at`, `updated_at` | Optional RFC 3339 timestamps; invalid timestamps become null |
+| `native_ref` | Only `hostname`, `repository`, and numeric issue `number` |
+
+Priority, branch hints, and blockers have no GitHub mapping in this profile. Unknown provider
+payload fields are discarded rather than placed in `native_ref` or prompt context.
+
+Authentication is owned by `gh`: use an existing CLI login or its supported token environment
+variables, `GH_TOKEN`/`GITHUB_TOKEN` for GitHub.com and
+`GH_ENTERPRISE_TOKEN`/`GITHUB_ENTERPRISE_TOKEN` for enterprise hosts. The adapter declares all four
+names through `secret_environment_names`, so the existing process boundary removes them from the
+Codex child environment. The shared tracker gateway retains the union of declared names across
+workflow reloads, protecting workers that launch after an adapter replacement. This does not
+isolate the CLI credential store: host credentials already
+available through `gh` configuration remain subject to the host's existing access controls. Do not
+put tokens in `WORKFLOW.md`, issue fields, or command strings. Validation only checks local
+configuration; authentication and repository access are checked when polling begins.
+
+| Error category | Meaning |
+| --- | --- |
+| `unsupported_tracker_kind` | Adapter was asked to validate a kind other than `github` |
+| `invalid_tracker_config` | Repository, hostname, timeout, or GitHub state configuration is invalid |
+| `tracker_request` | `gh` launch failure, timeout, nonzero exit, authentication failure, or rate limit |
+| `tracker_response` | Malformed JSON, invalid issue data, duplicate identities, or workspace-key collision |
+
+Request failures expose sanitized categories and messages; captured `gh` stdout and stderr are not
+copied into errors or logs. Malformed responses fail the whole operation without a partial result.
+
+The adapter is read-only and exposes no provider-native agent tools. State updates, comments, and
+pull-request links require a separately authorized external process or an explicitly configured
+agent workflow using `gh`. The supplied example only asks the agent to implement, test, and report;
+it does not post comments or close issues automatically.
 
 ## `json_file` tracker
 
@@ -236,8 +340,8 @@ body is the prompt template. Unknown top-level YAML keys are ignored for forward
 
 | Field | Default | Notes |
 | --- | --- | --- |
-| `tracker.kind` | none | Required; `json_file` or `memory` |
-| `tracker.provider` | `{}` | `json_file` requires nonblank `path` with relative, `~`, and leading `$VAR` forms |
+| `tracker.kind` | none | Required; `github`, `json_file`, or `memory` |
+| `tracker.provider` | `{}` | `github` requires `repository`; `json_file` requires nonblank `path` with relative, `~`, and leading `$VAR` forms |
 | `tracker.required_labels` | `[]` | Every label must match, ignoring case/outer whitespace |
 | `tracker.active_states` | none | Required, provider-native state names |
 | `tracker.terminal_states` | none | Required, provider-native state names |
@@ -337,10 +441,11 @@ operator or an unimplemented tool.
   headless run. A `never` policy is suitable only when the configured sandbox and environment make
   unattended execution acceptable.
 - Tracker adapters may declare secret environment-variable names. Those names are removed from the
-  Codex child environment and logs redact conventionally secret keys. The included adapters declare
-  none. The JSON-file codec normalizes a `native_ref` containing a nested secret-looking key to null.
-  Do not put credentials in prompts, other issue fields, command strings, or unrecognized
-  environment variables.
+  Codex child environment and logs redact conventionally secret keys. The GitHub adapter declares
+  `GH_TOKEN`, `GITHUB_TOKEN`, `GH_ENTERPRISE_TOKEN`, and `GITHUB_ENTERPRISE_TOKEN`; the other included
+  adapters declare none. Existing `gh` credential-store access is unaffected. The JSON-file codec
+  normalizes a `native_ref` containing a nested secret-looking key to null. Do not put credentials
+  in prompts, other issue fields, command strings, or unrecognized environment variables.
 - App-server lines are bounded, malformed protocol objects fail the session, and interactive input
   requests are rejected.
 - App-server subprocesses are tracked through the launched root process and, when attachment
@@ -365,7 +470,8 @@ The following are optional or provider-specific Symphony SPEC surfaces and are n
 - HTTP status/control server, `server.port`, and CLI `--port`
 - SSH/remote worker pools and per-host scheduling
 - Provider-native app-server tools or tracker write tools
-- Network tracker adapters such as Linear, GitHub, Jira, or other hosted services
+- Additional network tracker adapters such as Linear or Jira
+- GitHub Projects board statuses and task-list checkbox synchronization
 - WebSocket or Unix-socket app-server transports
 - Durable retry/session state across Symphony process restarts
 

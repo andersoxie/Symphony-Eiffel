@@ -16,6 +16,7 @@ feature -- Factory
 		local
 			memory: SYM_MEMORY_TRACKER
 			file_tracker: SYM_JSON_FILE_TRACKER
+			github: SYM_GITHUB_TRACKER
 		do
 			last_error := Void
 			if a_config.tracker_kind.is_case_insensitive_equal ("memory") then
@@ -26,6 +27,10 @@ feature -- Factory
 				create file_tracker.make
 				file_tracker.validate_config (a_config)
 				if file_tracker.last_call_succeeded then Result := file_tracker else last_error := file_tracker.last_error end
+			elseif a_config.tracker_kind.is_case_insensitive_equal ("github") then
+				create github.make
+				github.validate_config (a_config)
+				if github.last_call_succeeded then Result := github else last_error := github.last_error end
 			else
 				create last_error.make ("unsupported_tracker_kind", "Unsupported tracker.kind: " + a_config.tracker_kind)
 			end
@@ -37,10 +42,11 @@ feature -- Factory
 
 	is_supported (a_kind: READABLE_STRING_GENERAL): BOOLEAN
 		do
-			Result := a_kind.is_case_insensitive_equal ("memory") or else a_kind.is_case_insensitive_equal ("json_file")
+			Result := a_kind.is_case_insensitive_equal ("memory") or else a_kind.is_case_insensitive_equal ("json_file") or else
+				a_kind.is_case_insensitive_equal ("github")
 		ensure
 			definition: Result = (a_kind.is_case_insensitive_equal ("memory") or else
-				a_kind.is_case_insensitive_equal ("json_file"))
+				a_kind.is_case_insensitive_equal ("json_file") or else a_kind.is_case_insensitive_equal ("github"))
 		end
 
 end

@@ -14,6 +14,9 @@ feature {NONE} -- Initialization
 			core: TEST_SYM_CORE
 			prompt: TEST_SYM_PROMPT_RENDERER
 			yaml: TEST_SYM_YAML_PARSER
+			github: TEST_SYM_GITHUB_TRACKER
+			process_output: TEST_SYM_PROCESS_OUTPUT
+			gateway: TEST_SYM_TRACKER_GATEWAY
 		do
 			create core
 			core.test_sha_256
@@ -43,7 +46,28 @@ feature {NONE} -- Initialization
 			yaml.test_block_scalar_styles_and_chomping
 			yaml.test_rejects_malformed_documents
 
-			io.put_string ("22 Eiffel tests passed.%N")
+			create github
+			github.test_configuration_invalidates_previous_source
+			github.test_configuration_boundaries
+			github.test_paginated_snapshot_and_process_arguments
+			github.test_refresh_failure_empty_recovery_and_missing_issue
+			github.test_transport_and_payload_failures_are_atomic
+			github.test_empty_reads_and_secret_environment_names
+			github.test_codec_mapping_native_reference_and_pull_request_reset
+			github.test_codec_rejects_malformed_required_fields_and_recovers
+
+			create process_output
+			process_output.test_default_capture_limit
+			process_output.test_capture_boundaries_and_independent_streams
+			process_output.test_overflow_is_sticky
+			process_output.test_snapshot_independence
+			process_output.test_shell_runner_large_output_and_overflow
+			process_output.test_shell_runner_timeout_and_reuse
+
+			create gateway
+			gateway.test_secret_names_survive_adapter_replacements
+
+			io.put_string ("37 Eiffel tests passed.%N")
 		end
 
 end
