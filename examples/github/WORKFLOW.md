@@ -1,6 +1,6 @@
 ---
 # Read-only GitHub Issues profile; see README.md for configuration and lifecycle.
-# Authenticate gh on the host; polling uses gh api --paginate --slurp.
+# Authenticate gh 2.48.0 or newer on the host; polling uses gh api --paginate --slurp.
 # GitHub uses native open/closed states. Eligible open issues can run again
 # while they retain every required label, including after a successful turn.
 # Remove the symphony label for review; preserve workspace results before closing.

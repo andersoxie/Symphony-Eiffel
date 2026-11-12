@@ -17,7 +17,7 @@
 		<library name="thread" location="$ISE_LIBRARY\library\thread\thread.ecf" use_application_options="true"/>
 		<library name="json" location="$ISE_LIBRARY\contrib\library\text\parser\json\library\json.ecf"/>
 		<library name="eel" location="$ISE_LIBRARY\contrib\library\text\encryption\eel\eel.ecf"/>
-		<external_include location="$ECF_CONFIG_PATH\src\platform"/>
+		<external_include location="$ECF_CONFIG_PATH/src/platform"/>
 		<cluster name="source" location="src\" recursive="true"/>
 	</target>
 	<target name="tests" extends="symphony">

@@ -96,29 +96,33 @@ feature -- Execution
 		do
 			if not retried then
 				last_output_truncated := False
-				create factory
-				process := factory.process_launcher (a_executable, a_arguments, a_cwd.name)
-				process.set_hidden (True)
-				process.set_separate_console (False)
-				process.enable_launch_in_new_process_group
-				create capture.make_with_limit (output_limit)
-				process.redirect_output_to_agent (agent capture.append_output)
-				process.redirect_error_to_agent (agent capture.append_error)
-				process.launch
-				if process.launched then
-					timeout := a_timeout_ms.max (1).min ({INTEGER}.max_value).to_integer_32
-					process.wait_for_exit_with_timeout (timeout)
-					if not process.has_exited then
-						timed_out := True
-						process.terminate_tree
-						process.wait_for_exit_with_timeout (5_000)
-					end
-					if process.has_exited then
-						create last_result.make (True, timed_out, process.exit_code, capture.output_snapshot, capture.error_snapshot)
+				if attached resolved_executable (a_executable, a_cwd) as executable then
+					create factory
+					process := factory.process_launcher (executable, a_arguments, a_cwd.name)
+					process.set_hidden (True)
+					process.set_separate_console (False)
+					process.enable_launch_in_new_process_group
+					create capture.make_with_limit (output_limit)
+					process.redirect_output_to_agent (agent capture.append_output)
+					process.redirect_error_to_agent (agent capture.append_error)
+					process.launch
+					if process.launched then
+						timeout := a_timeout_ms.max (1).min ({INTEGER}.max_value).to_integer_32
+						process.wait_for_exit_with_timeout (timeout)
+						if not process.has_exited then
+							timed_out := True
+							process.terminate_tree
+							process.wait_for_exit_with_timeout (5_000)
+						end
+						if process.has_exited then
+							create last_result.make (True, timed_out, process.exit_code, capture.output_snapshot, capture.error_snapshot)
+						else
+							create last_result.make (True, True, -1, capture.output_snapshot, capture.error_snapshot)
+						end
+						last_output_truncated := capture.has_overflowed
 					else
-						create last_result.make (True, True, -1, capture.output_snapshot, capture.error_snapshot)
+						create last_result.make (False, False, -1, "", "process launch failed")
 					end
-					last_output_truncated := capture.has_overflowed
 				else
 					create last_result.make (False, False, -1, "", "process launch failed")
 				end
@@ -178,6 +182,33 @@ feature -- Shell selection
 			end
 		ensure
 			executable_present: not Result.is_empty
+		end
+
+feature {SYM_CODEX_TRANSPORT} -- Executable resolution
+
+	resolved_executable (a_executable: READABLE_STRING_GENERAL; a_cwd: PATH): detachable READABLE_STRING_GENERAL
+			-- Resolve a bare executable name before calling the Unix process launcher.
+		require
+			executable_present: not a_executable.is_empty
+		local
+			working_directory, directory, candidate: PATH
+			file: RAW_FILE
+		do
+			if {PLATFORM}.is_windows or else a_executable.has ('/') then
+				Result := a_executable
+			elseif attached environment.item ("PATH") as search_path then
+				working_directory := a_cwd.absolute_path
+				across search_path.split (':') as entry until Result /= Void loop
+					create directory.make_from_string (entry.item)
+					candidate := directory.absolute_path_in (working_directory).extended (a_executable)
+					create file.make_with_path (candidate)
+					if file.exists and then file.is_plain and then file.is_executable then
+						Result := candidate.name
+					end
+				end
+			end
+		ensure
+			executable_present_if_found: attached Result as executable implies not executable.is_empty
 		end
 
 feature {NONE} -- Shared environment
