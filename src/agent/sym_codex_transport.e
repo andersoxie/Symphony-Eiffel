@@ -78,13 +78,15 @@ feature -- Lifecycle
 			containment_failed := False
 			if not safety.is_existing_workspace_directory (a_workspace_root, a_cwd) then
 				create last_error.make ("workspace_path_escape", "Codex cwd must be a per-issue workspace inside workspace.root")
+			elseif not attached shell.resolved_executable (shell.bash_executable, a_cwd) as executable then
+				create last_error.make ("codex_launch_error", "Failed to locate bash on PATH")
 			else
 				command := unset_prefix (a_secret_names) + "exec " + a_command.to_string_32
 				create args.make (2)
 				args.extend ("-lc")
 				args.extend (command)
 				create factory
-				p := factory.process_launcher (shell.bash_executable, args, a_cwd.canonical_path.name)
+				p := factory.process_launcher (executable, args, a_cwd.canonical_path.name)
 				p.set_hidden (True)
 				p.set_separate_console (False)
 				p.enable_launch_in_new_process_group
